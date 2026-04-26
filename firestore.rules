@@ -1,0 +1,85 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- User Rules ---
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.keys().hasAll(['uid', 'email']) &&
+               data.uid is string && data.uid.size() <= 128 &&
+               data.email is string && data.email.size() <= 256 &&
+               (!('completedLessons' in data) || (data.completedLessons is list && data.completedLessons.size() <= 5000)) &&
+               (!('fullMarkExams' in data) || (data.fullMarkExams is list && data.fullMarkExams.size() <= 5000)) &&
+               (!('examProgress' in data) || (data.examProgress is map));
+      }
+
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && isValidUser(incoming()) && 
+                    incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'lastLogin', 'completedLessons', 'fullMarkExams', 'examProgress']);
+      
+      // Favorites Subcollection
+      match /favorites/{favoriteId} {
+        function isValidFavorite(data) {
+          return data.keys().hasAll(['question', 'favoritedAt']) &&
+                 data.question is string && data.question.size() <= 2000 &&
+                 data.favoritedAt is timestamp &&
+                 (!('options' in data) || data.options is list) &&
+                 (!('correctAnswerIndex' in data) || data.correctAnswerIndex is number) &&
+                 (!('explanation' in data) || data.explanation is string) &&
+                 (!('lessonId' in data) || data.lessonId is number) &&
+                 (!('semesterId' in data) || data.semesterId is number);
+        }
+
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidFavorite(incoming());
+        allow delete: if isOwner(userId);
+      }
+
+      // Exam Attempts Subcollection
+      match /attempts/{attemptId} {
+        function isValidAttempt(data) {
+          return data.keys().hasAll(['score', 'totalQuestions', 'completedAt']) &&
+                 data.score is number && data.totalQuestions is number &&
+                 data.completedAt is timestamp &&
+                 (!('testNum' in data) || data.testNum is number) &&
+                 (!('testUrl' in data) || data.testUrl is string) &&
+                 (!('lessonId' in data) || data.lessonId is number) &&
+                 (!('semesterId' in data) || data.semesterId is number) &&
+                 (!('maxScore' in data) || data.maxScore is number) &&
+                 (!('userAnswers' in data) || data.userAnswers is map);
+        }
+
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidAttempt(incoming());
+      }
+    }
+  }
+}

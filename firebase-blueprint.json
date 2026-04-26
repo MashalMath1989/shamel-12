@@ -1,0 +1,65 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile and settings",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "lastLogin": { "type": "string", "format": "date-time" },
+        "completedLessons": { "type": "array", "items": { "type": "string" } },
+        "fullMarkExams": { "type": "array", "items": { "type": "string" } },
+        "examProgress": { "type": "object", "description": "Keyed by exam URL or ID, stores partial progress" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Favorite": {
+      "title": "Favorite Question",
+      "description": "A question favorited by the user",
+      "type": "object",
+      "properties": {
+        "question": { "type": "string" },
+        "options": { "type": "array" },
+        "correctAnswerIndex": { "type": "number" },
+        "explanation": { "type": "string" },
+        "lessonId": { "type": "number" },
+        "semesterId": { "type": "number" },
+        "favoritedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["question", "favoritedAt"]
+    },
+    "ExamAttempt": {
+      "title": "Exam Attempt",
+      "description": "An attempt at an exam by the student",
+      "type": "object",
+      "properties": {
+        "testNum": { "type": "number" },
+        "testUrl": { "type": "string" },
+        "lessonId": { "type": "number" },
+        "semesterId": { "type": "number" },
+        "score": { "type": "number" },
+        "totalQuestions": { "type": "number" },
+        "maxScore": { "type": "number" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "userAnswers": { "type": "object" }
+      },
+      "required": ["score", "totalQuestions", "completedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile document"
+    },
+    "/users/{userId}/favorites/{favoriteId}": {
+      "schema": "Favorite",
+      "description": "User's favorite questions"
+    },
+    "/users/{userId}/attempts/{attemptId}": {
+      "schema": "ExamAttempt",
+      "description": "User's completed exam attempts"
+    }
+  }
+}

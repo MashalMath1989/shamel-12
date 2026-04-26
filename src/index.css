@@ -1,0 +1,115 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Amiri:wght@400;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap');
+@import "tailwindcss";
+
+@font-face {
+  font-family: 'Al-Mohand';
+  src: url('https://cdn.jsdelivr.net/gh/mshams/arabic-fonts@master/fonts/Al-Mohand.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@theme {
+  --leading-extra-relaxed: 2;
+  --font-serif: "Libre Baskerville", serif;
+  --font-mohand: "Al-Mohand", "IBM Plex Sans Arabic", serif;
+  --font-amiri: "Amiri", serif;
+  
+  @keyframes pulse-slow {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.9; transform: scale(0.98); }
+  }
+  --animate-pulse-slow: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@layer base {
+  .textbook-body {
+    @apply leading-[2.4] text-slate-800 font-serif;
+  }
+  
+  .textbook-step-label {
+    @apply font-sans font-black text-blue-600 uppercase tracking-widest text-sm mb-4 block;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-slate-50;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-slate-200 rounded-full hover:bg-slate-300 transition-colors;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .math-container .katex,
+  .math-text-container .katex {
+    white-space: nowrap !important;
+  }
+
+  /* تحسين عرض الكسور الرياضية */
+  .katex .mfrac .frac-line {
+    border-bottom-width: 1.5px !important;
+    min-height: 1.5px !important;
+  }
+  
+  .katex .mfrac > span > span {
+    padding: 0.15em 0 !important;
+  }
+
+  .explanation-content .katex-display {
+    @apply scale-100 origin-center my-0.5;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  
+  .explanation-content .katex {
+    font-size: 1em !important;
+    white-space: nowrap;
+  }
+}
+
+@media print {
+  body {
+    background-color: white !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print\:p-0 {
+    padding: 0 !important;
+  }
+  .print\:m-0 {
+    margin: 0 !important;
+  }
+  .print\:shadow-none {
+    box-shadow: none !important;
+  }
+  .print\:border-none {
+    border: none !important;
+  }
+  .print\:bg-white {
+    background-color: white !important;
+  }
+  
+  #printable-question {
+    display: block !important;
+    visibility: visible !important;
+    width: 100% !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+  }
+  
+  /* Ensure KaTeX renders correctly in print */
+  .katex {
+    font-size: 1.1em !important;
+  }
+}
