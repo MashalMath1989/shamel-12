@@ -18,6 +18,8 @@ interface Question {
   correctAnswerIndex: number;
   explanation?: string;
   lessonId?: number;
+  has_image?: boolean;
+  image_url?: string;
 }
 
 interface ExamData {
@@ -358,6 +360,24 @@ const saveAttempt = async (userId: string, attempt: any) => {
   }
 };
 
+const QuestionWithImage: React.FC<{ question: Question; baseSize?: string; weight?: string; isPDF?: boolean }> = ({ question, baseSize, weight, isPDF }) => {
+  return (
+    <div className="space-y-3">
+      <MathText text={question.question} baseSize={baseSize} weight={weight} isPDF={isPDF} />
+      {question.has_image && question.image_url && (
+        <div className={`mt-2 ${isPDF ? 'text-center' : 'flex justify-center'}`}>
+          <img 
+            src={question.image_url} 
+            alt="رسم توضيحي" 
+            className={`${isPDF ? 'max-h-48' : 'max-h-64 md:max-h-80'} rounded-lg shadow-sm border border-slate-100 object-contain`} 
+            referrerPolicy="no-referrer"
+          />
+        </div>
+      )}
+    </div>
+  );
+};
+
 const QuestionActionButtons: React.FC<{ question: Question; lessonId?: number; semesterId?: number }> = ({ question, lessonId, semesterId }) => {
   const user = auth.currentUser;
   const effectiveLessonId = lessonId || question.lessonId;
@@ -405,32 +425,32 @@ const QuestionActionButtons: React.FC<{ question: Question; lessonId?: number; s
   };
 
   return (
-    <div className="flex items-center justify-end gap-2 mb-2 no-print">
+    <div className="absolute top-1 left-3 flex items-center gap-1 no-print z-20">
       <button 
         onClick={handleShare}
-        className="w-8 h-8 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center hover:bg-blue-100 hover:text-blue-600 transition-colors"
+        className="w-7 h-7 rounded-lg bg-white/40 text-slate-500 flex items-center justify-center hover:bg-blue-50 hover:text-blue-600 transition-colors shadow-sm backdrop-blur-[2px]"
         title="مشاركة السؤال"
       >
-        <Share2 className="w-4 h-4" />
+        <Share2 className="w-3.5 h-3.5" />
       </button>
       <button 
         onClick={handleReport}
-        className="w-8 h-8 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center hover:bg-red-100 hover:text-red-600 transition-colors"
+        className="w-7 h-7 rounded-lg bg-white/40 text-slate-500 flex items-center justify-center hover:bg-red-50 hover:text-red-600 transition-colors shadow-sm backdrop-blur-[2px]"
         title="تبليغ عن مشكلة"
       >
-        <Flag className="w-4 h-4" />
+        <Flag className="w-3.5 h-3.5" />
       </button>
       {effectiveLessonId && (
         <button 
           onClick={handleFavorite}
-          className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all group ${
+          className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all group shadow-sm backdrop-blur-[2px] ${
             favorite 
-              ? 'bg-orange-100 text-orange-500 shadow-sm border border-orange-200' 
-              : 'bg-slate-50 text-slate-400 hover:bg-orange-50 hover:text-orange-400'
+              ? 'bg-orange-100 text-orange-500 border border-orange-200' 
+              : 'bg-white/40 text-slate-400 hover:bg-orange-50 hover:text-orange-400'
           }`}
           title="أضف للمفضلة"
         >
-          <Star className={`w-4 h-4 ${favorite ? 'fill-orange-500' : 'opacity-20 group-hover:opacity-60'}`} />
+          <Star className={`w-3.5 h-3.5 ${favorite ? 'fill-orange-500' : 'opacity-20 group-hover:opacity-60'}`} />
         </button>
       )}
     </div>
@@ -607,7 +627,7 @@ const FavoritesModal: React.FC<{ isOpen: boolean; lessonId: number | number[]; l
                         </div>
                         
                         <div className="mb-6">
-                          <MathText text={q.question} baseSize="text-lg md:text-xl" weight="font-bold" />
+                          <QuestionWithImage question={q} baseSize="text-lg md:text-xl" weight="font-bold" />
                         </div>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
@@ -1171,7 +1191,9 @@ const fetchAndCacheExam = async (url: string): Promise<Question[]> => {
         question: q.question || `سؤال رقم ${idx + 1}`,
         options: options,
         correctAnswerIndex: correctAnswerIndex,
-        explanation: q.explanation || q.hint || ''
+        explanation: q.explanation || q.hint || '',
+        has_image: q.has_image || false,
+        image_url: q.image_url || ''
       };
     });
 
@@ -2030,13 +2052,13 @@ const MinistryModelsScreen: React.FC<{
       </header>
 
       <div className="grid grid-cols-3 gap-2">
-        {Array.from({ length: 10 }).map((_, i) => {
+        {Array.from({ length: 12 }).map((_, i) => {
           const modelNum = i + 1;
           const examKey = `ADV_MODEL_${modelNum}`;
           const isFullMark = fullMarkExams.includes(examKey);
           const progress = examProgress[examKey];
           const answeredCount = progress?.userAnswers ? Object.keys(progress.userAnswers).length : 0;
-          const totalQuestions = 50; 
+          const totalQuestions = (modelNum === 11 || modelNum === 12) ? 30 : 50; 
           const progressPercent = (answeredCount / totalQuestions) * 100;
 
           return (
@@ -2070,8 +2092,17 @@ const MinistryModelsScreen: React.FC<{
                   <CheckCircle2 className="w-3 h-3 text-white" />
                 </motion.div>
               )}
+              {(modelNum === 11 || modelNum === 12) && (
+                <motion.div
+                  animate={{ opacity: [1, 0, 1] }}
+                  transition={{ repeat: Infinity, duration: 1, times: [0, 0.5, 1] }}
+                  className="absolute top-1 left-0 right-0 flex justify-center z-0 pointer-events-none opacity-20"
+                >
+                  <span className="text-lg">🚨</span>
+                </motion.div>
+              )}
               <span className={`font-bold text-xs relative z-10 ${isFullMark ? 'text-white' : 'text-slate-800'}`}>
-                نموذج {modelNum}
+                نموذج {modelNum}{(modelNum === 11 || modelNum === 12) ? ' (وزارة)' : ''}
               </span>
               {!isFullMark && progressPercent > 0 && (
                 <span className="text-[9px] font-bold text-yellow-950 mt-1 relative z-10">
@@ -2087,7 +2118,7 @@ const MinistryModelsScreen: React.FC<{
            onClick={onSelectRandom}
            initial={{ opacity: 0, y: 10 }}
            animate={{ opacity: 1, y: 0 }}
-           transition={{ delay: 10 * 0.03 }}
+           transition={{ delay: 11 * 0.03 }}
            className="bg-gradient-to-br from-blue-600 to-blue-700 p-3 rounded-xl shadow-md border border-black flex flex-col items-center justify-center text-center hover:shadow-lg hover:brightness-110 transition-all cursor-pointer group aspect-square"
         >
           <RefreshCcw className="w-5 h-5 text-white/80 group-hover:rotate-180 transition-transform duration-500 mb-2" />
@@ -2099,7 +2130,7 @@ const MinistryModelsScreen: React.FC<{
           onClick={onOpenFavorites}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 11 * 0.03 }}
+          transition={{ delay: 12 * 0.03 }}
           className="bg-white p-3 rounded-xl shadow-sm border border-black flex flex-col items-center justify-center text-center hover:shadow-md hover:border-orange-200 transition-all cursor-pointer group aspect-square"
         >
           <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
@@ -2128,10 +2159,31 @@ const AdvancedExamScreen: React.FC<{
   const examKey = `ADV_MODEL_${examId}`;
   const remoteProgress = !isRandom ? examProgress[examKey] : null;
   
-  const [currentStep, setCurrentStep] = useState<'quiz' | 'result'>('quiz');
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [userAnswers, setUserAnswers] = useState<Record<number, string | number>>({});
-  const [timeLeft, setTimeLeft] = useState(180 * 60); // 3 hours in seconds
+  const getInitialProgress = () => {
+    const saved = localStorage.getItem(`advExamProgress_${examId}`);
+    if (saved) {
+      return JSON.parse(saved);
+    }
+    return null;
+  };
+
+  const initialLocalProgress = getInitialProgress();
+
+  const [currentStep, setCurrentStep] = useState<'quiz' | 'result'>(initialLocalProgress?.currentStep || 'quiz');
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(initialLocalProgress?.currentQuestionIndex || 0);
+  const [userAnswers, setUserAnswers] = useState<Record<number, string | number>>(initialLocalProgress?.userAnswers || {});
+  const [timeLeft, setTimeLeft] = useState(initialLocalProgress?.timeLeft !== undefined ? initialLocalProgress.timeLeft : 180 * 60); 
+  
+  // Sync state to localStorage
+  useEffect(() => {
+    const progress = {
+      currentStep,
+      currentQuestionIndex,
+      userAnswers,
+      timeLeft
+    };
+    localStorage.setItem(`advExamProgress_${examId}`, JSON.stringify(progress));
+  }, [examId, currentStep, currentQuestionIndex, userAnswers, timeLeft]);
   const [showExitModal, setShowExitModal] = useState(false);
   const [showResultExitConfirm, setShowResultExitConfirm] = useState(false);
   const [showTimeoutModal, setShowTimeoutModal] = useState(false);
@@ -2142,7 +2194,13 @@ const AdvancedExamScreen: React.FC<{
   const [showContinueModal, setShowContinueModal] = useState(!!remoteProgress && !isRandom && !!hasAnsweredQuestions);
 
   const handleContinue = () => {
-    if (remoteProgress) {
+    if (initialLocalProgress) {
+      // Local storage has priority if it exists and we haven't answered anything yet in this session
+      // But actually, we already initialized state from local storage.
+      // Remote progress is for sync across devices or if local storage was cleared.
+    }
+    
+    if (remoteProgress && !initialLocalProgress) {
       setCurrentStep(remoteProgress.currentStep || 'quiz');
       setCurrentQuestionIndex(remoteProgress.currentQuestionIndex || 0);
       setUserAnswers(remoteProgress.userAnswers || {});
@@ -2155,6 +2213,11 @@ const AdvancedExamScreen: React.FC<{
     if (!isRandom && clearExamProgress) {
       clearExamProgress(examKey);
     }
+    localStorage.removeItem(`advExamProgress_${examId}`);
+    setCurrentStep('quiz');
+    setCurrentQuestionIndex(0);
+    setUserAnswers({});
+    setTimeLeft(180 * 60);
     setShowContinueModal(false);
   };
 
@@ -2310,6 +2373,24 @@ const AdvancedExamScreen: React.FC<{
     try {
       setLoading(true);
       setError(null);
+
+      // Handle Model 11 (Ministry) as a special case with a specific URL
+      if (examId === 11 && !isRandom) {
+        const ministryUrl = "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/MATH_Expect11.json";
+        const fetchedQuestions = await fetchAndCacheExam(ministryUrl);
+        setQuestions(fetchedQuestions);
+        setLoading(false);
+        return;
+      }
+
+      // Handle Model 12 (Ministry) as a special case with a specific URL
+      if (examId === 12 && !isRandom) {
+        const ministryUrl = "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/MATH_Expect12.json";
+        const fetchedQuestions = await fetchAndCacheExam(ministryUrl);
+        setQuestions(fetchedQuestions);
+        setLoading(false);
+        return;
+      }
       
       const allFetchedQuestions: Question[] = [];
       const usedKeys = new Set<string>();
@@ -2427,18 +2508,23 @@ const AdvancedExamScreen: React.FC<{
     return (
       <div className="min-h-screen bg-[#e8d5c4] flex flex-col items-center justify-center p-6 text-center">
         <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
-        <h2 className="text-xl font-bold text-slate-800">جاري موازنة الأسئلة وتحميل النموذج...</h2>
-        <p className="text-slate-500 mt-2">يرجى الانتظار، جاري تجميع 50 سؤالاً من جميع الوحدات</p>
+        <h2 className="text-xl font-bold text-slate-800">
+          {(examId === 11 || examId === 12) ? "جاري تحميل النموذج الوزاري..." : "جاري موازنة الأسئلة وتحميل النموذج..."}
+        </h2>
+        <p className="text-slate-500 mt-2">
+          {(examId === 11 || examId === 12) ? "يرجى الانتظار، جاري تحميل أسئلة النموذج الوزاري..." : "يرجى الانتظار، جاري تجميع 50 سؤالاً من جميع الوحدات"}
+        </p>
       </div>
     );
   }
 
-  if (error || questions.length < 50) {
+  const requiredCount = (examId === 11 || examId === 12) ? 30 : 50;
+  if (error || questions.length < requiredCount) {
     return (
       <div className="min-h-screen bg-[#e8d5c4] flex flex-col items-center justify-center p-6 text-center">
         <AlertTriangle className="w-16 h-16 text-red-500 mb-4" />
         <h2 className="text-xl font-bold text-red-800">خطأ في الاتصال</h2>
-        <p className="text-slate-600 mt-2">{error || "تعذر تجميع كافة الأسئلة المطلوبة (50 سؤالاً). يرجى التحقق من اتصال الإنترنت."}</p>
+        <p className="text-slate-600 mt-2">{error || `تعذر تجميع كافة الأسئلة المطلوبة (${requiredCount} سؤالاً). يرجى التحقق من اتصال الإنترنت.`}</p>
         <button onClick={fetchQuestions} className="mt-8 bg-blue-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg">حاول مرة أخرى</button>
         <button onClick={onBack} className="mt-3 text-slate-500 font-bold underline">العودة للرئيسية</button>
       </div>
@@ -2463,7 +2549,8 @@ const AdvancedExamScreen: React.FC<{
     setCurrentStep('result');
     
     const finalScore = calculateScore();
-    if (!isRandom && onSaveFullMark && finalScore === 200) {
+    const maxScore = questions.length * 4;
+    if (!isRandom && onSaveFullMark && finalScore === maxScore) {
       onSaveFullMark(examKey);
     }
     
@@ -2486,6 +2573,7 @@ const AdvancedExamScreen: React.FC<{
   };
 
   const finalScore = calculateScore();
+  const maxScore = questions.length * 4;
 
   const optionLetters = ['a', 'b', 'c', 'd', 'e', 'f'];
 
@@ -2552,8 +2640,8 @@ const AdvancedExamScreen: React.FC<{
 
             <ProgressBar current={currentQuestionIndex + 1} total={questions.length} />
 
-            <div id="advanced-printable-question" className="bg-white rounded-xl shadow-xl shadow-blue-900/10 border-t-8 border-blue-600 overflow-visible mb-8 mt-4">
-              <div className="p-3 md:p-8 pb-4">
+            <div id="advanced-printable-question" className="bg-white rounded-xl shadow-xl shadow-blue-900/10 border-t-8 border-blue-600 overflow-visible mb-8 mt-4 relative">
+              <div className="p-3 md:p-8 pb-4 pt-12 md:pt-12">
                 <QuestionActionButtons 
                   key={`fav-${currentQuestionIndex}-${questions[currentQuestionIndex].question}`}
                   question={questions[currentQuestionIndex]} 
@@ -2565,7 +2653,7 @@ const AdvancedExamScreen: React.FC<{
                     {currentQuestionIndex + 1}
                   </div>
                   <div className="flex-1">
-                    <MathText text={questions[currentQuestionIndex].question} baseSize="text-lg md:text-xl" />
+                    <QuestionWithImage question={questions[currentQuestionIndex]} baseSize="text-lg md:text-xl" />
                   </div>
                 </div>
               </div>
@@ -2642,9 +2730,9 @@ const AdvancedExamScreen: React.FC<{
 
               <div className="flex items-center gap-4 mb-4 relative z-10">
                 <div className={`w-14 h-14 rounded-xl flex items-center justify-center shrink-0 shadow-md ${
-                  finalScore / 200 >= 0.5 ? 'bg-green-500 text-white' : 'bg-orange-500 text-white'
+                  finalScore / maxScore >= 0.5 ? 'bg-green-500 text-white' : 'bg-orange-500 text-white'
                 }`}>
-                  {finalScore / 200 >= 0.5 ? <CheckCircle2 className="w-8 h-8" /> : <RefreshCcw className="w-8 h-8" />}
+                  {finalScore / maxScore >= 0.5 ? <CheckCircle2 className="w-8 h-8" /> : <RefreshCcw className="w-8 h-8" />}
                 </div>
                 
                 <div className="flex-1">
@@ -2652,7 +2740,7 @@ const AdvancedExamScreen: React.FC<{
                   <div className="text-3xl font-black text-slate-900 font-mohand flex items-baseline gap-1">
                     <span>{finalScore}</span>
                     <span className="text-slate-300 text-lg">/</span>
-                    <span className="text-slate-300 text-lg">200</span>
+                    <span className="text-slate-300 text-lg">{maxScore}</span>
                   </div>
                 </div>
               </div>
@@ -2660,15 +2748,15 @@ const AdvancedExamScreen: React.FC<{
               <div className="w-full h-1 bg-slate-100 rounded-full mb-3 overflow-hidden relative z-10">
                 <motion.div 
                   initial={{ width: 0 }}
-                  animate={{ width: `${(finalScore / 200) * 100}%` }}
-                  className={`h-full ${finalScore / 200 >= 0.5 ? 'bg-green-500' : 'bg-orange-500'}`}
+                  animate={{ width: `${(finalScore / maxScore) * 100}%` }}
+                  className={`h-full ${finalScore / maxScore >= 0.5 ? 'bg-green-500' : 'bg-orange-500'}`}
                 />
               </div>
 
               <p className="text-slate-500 mb-4 text-[11px] font-bold leading-tight font-mohand px-1 relative z-10">
-                {finalScore / 200 >= 0.8 
+                {finalScore / maxScore >= 0.8 
                   ? 'أداء ممتاز! أنت بطل في الرياضيات.' 
-                  : finalScore / 200 >= 0.5 
+                  : finalScore / maxScore >= 0.5 
                   ? 'أداء جيد، يمكنك التحسن أكثر بالتدريب.' 
                   : 'لا بأس، حاول مراجعة الدروس والبدء من جديد.'}
               </p>
@@ -2707,15 +2795,22 @@ const AdvancedExamScreen: React.FC<{
 
               {questions.map((q, qIdx) => {
                 const userAnswer = userAnswers[qIdx];
-                const isCorrect = userAnswer === q.correctAnswerIndex;
+                const isSkipped = userAnswer === undefined;
+                const isCorrect = !isSkipped && userAnswer === q.correctAnswerIndex;
                 const isExpanded = expandedExplanations[qIdx];
 
                 return (
                   <div key={qIdx} className="space-y-4 no-print">
-                    <div className={`bg-white rounded-xl shadow-xl shadow-blue-900/10 border-2 overflow-visible ${
-                      isCorrect ? 'border-green-500' : 'border-red-500'
+                    <div className={`bg-white rounded-xl shadow-xl shadow-blue-900/10 border-2 overflow-visible relative ${
+                      isSkipped ? 'border-slate-300 opacity-85' : isCorrect ? 'border-green-500' : 'border-red-500'
                     }`}>
                       <div className="p-3 md:p-8 pb-4">
+                        {isSkipped && (
+                          <div className="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-500 text-xs font-bold text-center flex items-center justify-center gap-2">
+                            <Info className="w-4 h-4 text-slate-400" />
+                            <span>لم يتم الإجابة على هذا السؤال</span>
+                          </div>
+                        )}
                         <div className="mb-4">
                           <QuestionActionButtons 
                             question={q} 
@@ -2725,17 +2820,19 @@ const AdvancedExamScreen: React.FC<{
                         </div>
                         <div className="flex items-start gap-4">
                           <div className="flex flex-col items-center gap-1 shrink-0">
-                            <div className={`w-8 h-8 rounded-full ${isCorrect ? 'bg-green-500' : 'bg-red-500'} text-white flex items-center justify-center font-bold text-sm shadow-sm`}>
+                            <div className={`w-8 h-8 rounded-full ${isSkipped ? 'bg-slate-300' : isCorrect ? 'bg-green-500' : 'bg-red-500'} text-white flex items-center justify-center font-bold text-sm shadow-sm`}>
                               {qIdx + 1}
                             </div>
-                            {isCorrect ? (
+                            {isSkipped ? (
+                              <div className="text-[10px] font-bold text-slate-400 mt-1">تجاوز</div>
+                            ) : isCorrect ? (
                               <Check className="w-5 h-5 text-green-500" strokeWidth={3} />
                             ) : (
                               <X className="w-5 h-5 text-red-500" strokeWidth={3} />
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <MathText text={q.question} baseSize="text-lg md:text-xl" />
+                            <QuestionWithImage question={q} baseSize="text-lg md:text-xl" />
                           </div>
                         </div>
                       </div>
@@ -2870,7 +2967,7 @@ const AdvancedExamScreen: React.FC<{
                               {pageIdx * 4 + qIdx + 1}
                             </span>
                             <div className="flex-1 text-right text-slate-800 leading-snug font-bold">
-                              <MathText text={q.question} baseSize="text-[13px]" isPDF={true} />
+                              <QuestionWithImage question={q} baseSize="text-[13px]" isPDF={true} />
                             </div>
                           </div>
 
@@ -3578,12 +3675,12 @@ const ExamScreen: React.FC<{
               <ProgressBar current={currentQuestionIndex + 1} total={examData?.questions.length || 1} />
             </div>
 
-              <div id="printable-question" className="bg-white rounded-xl shadow-xl shadow-blue-900/10 border-t-8 border-blue-600 overflow-visible mb-8 print:shadow-none print:border-none print:m-0">
+              <div id="printable-question" className="bg-white rounded-xl shadow-xl shadow-blue-900/10 border-t-8 border-blue-600 overflow-visible mb-8 print:shadow-none print:border-none print:m-0 relative">
                 {/* Unified layout for all questions and options to ensure visibility */}
                 {(() => {
                   return (
                     <>
-                      <div className="p-3 md:p-8 pb-4">
+                      <div className="p-3 md:p-8 pb-4 pt-12 md:pt-12">
                         <QuestionActionButtons 
                           key={`fav-${currentQuestionIndex}-${currentQuestion.question}`}
                           question={currentQuestion} 
@@ -3595,10 +3692,7 @@ const ExamScreen: React.FC<{
                             {currentQuestionIndex + 1}
                           </div>
                           <div className="flex-1">
-                            <MathText 
-                              text={currentQuestion.question} 
-                              baseSize="text-lg md:text-xl" 
-                            />
+                            <QuestionWithImage question={currentQuestion} baseSize="text-lg md:text-xl" />
                           </div>
                         </div>
                       </div>
@@ -3811,15 +3905,22 @@ const ExamScreen: React.FC<{
 
               {examData?.questions.map((q, qIdx) => {
                 const userAnswer = userAnswers[qIdx];
-                const isCorrect = userAnswer === q.correctAnswerIndex;
+                const isSkipped = userAnswer === undefined;
+                const isCorrect = !isSkipped && userAnswer === q.correctAnswerIndex;
                 const isExpanded = expandedExplanations[qIdx];
 
                 return (
                   <div key={qIdx} className="space-y-4 no-print">
-                    <div className={`bg-white rounded-xl shadow-xl shadow-blue-900/10 border-2 overflow-visible ${
-                      isCorrect ? 'border-green-500' : 'border-red-500'
+                    <div className={`bg-white rounded-xl shadow-xl shadow-blue-900/10 border-2 overflow-visible relative ${
+                      isSkipped ? 'border-slate-300 opacity-85' : isCorrect ? 'border-green-500' : 'border-red-500'
                     }`}>
                       <div className="p-3 md:p-8 pb-4">
+                        {isSkipped && (
+                          <div className="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-500 text-xs font-bold text-center flex items-center justify-center gap-2">
+                            <Info className="w-4 h-4 text-slate-400" />
+                            <span>لم يتم الإجابة على هذا السؤال</span>
+                          </div>
+                        )}
                         <div className="mb-4">
                           <QuestionActionButtons 
                             question={q} 
@@ -3829,17 +3930,19 @@ const ExamScreen: React.FC<{
                         </div>
                         <div className="flex items-start gap-4">
                           <div className="flex flex-col items-center gap-1 shrink-0">
-                            <div className={`w-8 h-8 rounded-full ${isCorrect ? 'bg-green-500' : 'bg-red-500'} text-white flex items-center justify-center font-bold text-sm shadow-sm`}>
+                            <div className={`w-8 h-8 rounded-full ${isSkipped ? 'bg-slate-300' : isCorrect ? 'bg-green-500' : 'bg-red-500'} text-white flex items-center justify-center font-bold text-sm shadow-sm`}>
                               {qIdx + 1}
                             </div>
-                            {isCorrect ? (
+                            {isSkipped ? (
+                              <div className="text-[10px] font-bold text-slate-400 mt-1">تجاوز</div>
+                            ) : isCorrect ? (
                               <Check className="w-5 h-5 text-green-500" strokeWidth={3} />
                             ) : (
                               <X className="w-5 h-5 text-red-500" strokeWidth={3} />
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <MathText text={q.question} baseSize="text-lg md:text-xl" />
+                            <QuestionWithImage question={q} baseSize="text-lg md:text-xl" />
                           </div>
                         </div>
                       </div>
@@ -4196,7 +4299,7 @@ const ExamScreen: React.FC<{
                               {pageIdx * 4 + qIdx + 1}
                             </span>
                             <div className="flex-1 text-right text-slate-800 leading-snug font-bold">
-                              <MathText text={q.question} baseSize="text-[13px]" isPDF={true} />
+                              <QuestionWithImage question={q} baseSize="text-[13px]" isPDF={true} />
                             </div>
                           </div>
 
@@ -4452,12 +4555,22 @@ export default function App() {
     return saved ? JSON.parse(saved) : {};
   });
 
-  const [showFavorites, setShowFavorites] = useState<{semesterId: number, title: string} | null>(null);
+  const [showFavorites, setShowFavorites] = useState<{semesterId: number, title: string} | null>(() => {
+    const saved = localStorage.getItem('showFavorites');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
-  const [showMinistryModels, setShowMinistryModels] = useState(false);
-  const [showExamScheduleImage, setShowExamScheduleImage] = useState(false);
-  const [selectedAdvExam, setSelectedAdvExam] = useState<{ id: number; isRandom: boolean } | null>(null);
+  const [showMinistryModels, setShowMinistryModels] = useState(() => {
+    return localStorage.getItem('showMinistryModels') === 'true';
+  });
+  const [showExamScheduleImage, setShowExamScheduleImage] = useState(() => {
+    return localStorage.getItem('showExamScheduleImage') === 'true';
+  });
+  const [selectedAdvExam, setSelectedAdvExam] = useState<{ id: number; isRandom: boolean } | null>(() => {
+    const saved = localStorage.getItem('activeAdvExam');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [backRequested, setBackRequested] = useState(0);
 
   const handleSelectTest = (num: number, url?: string, ids?: { semesterId?: number, unitId?: number, lessonId?: number }) => {
@@ -4474,8 +4587,16 @@ export default function App() {
 
   const handleBackToHome = () => {
     setSelectedTest(null);
+    setSelectedAdvExam(null);
+    setShowMinistryModels(false);
+    setShowFavorites(null);
+    setShowExamScheduleImage(false);
     setBackRequested(0);
     localStorage.removeItem('activeTest');
+    localStorage.removeItem('activeAdvExam');
+    localStorage.removeItem('showMinistryModels');
+    localStorage.removeItem('showFavorites');
+    localStorage.removeItem('showExamScheduleImage');
     localStorage.removeItem('examProgress'); 
   };
 
@@ -4533,12 +4654,21 @@ export default function App() {
         setShowExamScheduleImage(false);
         setShowAbout(false);
         localStorage.removeItem('activeTest');
+        localStorage.removeItem('activeAdvExam');
+        localStorage.removeItem('showMinistryModels');
+        localStorage.removeItem('showFavorites');
+        localStorage.removeItem('showExamScheduleImage');
       } else if (targetScreen === 'models') {
         setShowMinistryModels(true);
+        localStorage.setItem('showMinistryModels', 'true');
         setSelectedTest(null);
+        localStorage.removeItem('activeTest');
         setSelectedAdvExam(null);
+        localStorage.removeItem('activeAdvExam');
         setShowFavorites(null);
+        localStorage.removeItem('showFavorites');
         setShowExamScheduleImage(false);
+        localStorage.removeItem('showExamScheduleImage');
       }
     };
 
@@ -4550,7 +4680,9 @@ export default function App() {
     setSelectedTest(null);
     localStorage.removeItem('activeTest');
     setBackRequested(0);
-    setSelectedAdvExam({ id, isRandom });
+    const advExam = { id, isRandom };
+    setSelectedAdvExam(advExam);
+    localStorage.setItem('activeAdvExam', JSON.stringify(advExam));
   };
 
   const handleExitConfirm = () => {
@@ -4567,6 +4699,31 @@ export default function App() {
       localStorage.removeItem('initialExpanded');
     }
   }, [selectedTest]);
+
+  // Persistence Sync Effects
+  useEffect(() => {
+    if (showMinistryModels) {
+      localStorage.setItem('showMinistryModels', 'true');
+    } else {
+      localStorage.removeItem('showMinistryModels');
+    }
+  }, [showMinistryModels]);
+
+  useEffect(() => {
+    if (showExamScheduleImage) {
+      localStorage.setItem('showExamScheduleImage', 'true');
+    } else {
+      localStorage.removeItem('showExamScheduleImage');
+    }
+  }, [showExamScheduleImage]);
+
+  useEffect(() => {
+    if (showFavorites) {
+      localStorage.setItem('showFavorites', JSON.stringify(showFavorites));
+    } else {
+      localStorage.removeItem('showFavorites');
+    }
+  }, [showFavorites]);
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
