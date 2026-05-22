@@ -2052,13 +2052,13 @@ const MinistryModelsScreen: React.FC<{
       </header>
 
       <div className="grid grid-cols-3 gap-2">
-        {Array.from({ length: 12 }).map((_, i) => {
+        {Array.from({ length: 14 }).map((_, i) => {
           const modelNum = i + 1;
           const examKey = `ADV_MODEL_${modelNum}`;
           const isFullMark = fullMarkExams.includes(examKey);
           const progress = examProgress[examKey];
           const answeredCount = progress?.userAnswers ? Object.keys(progress.userAnswers).length : 0;
-          const totalQuestions = (modelNum === 11 || modelNum === 12) ? 30 : 50; 
+          const totalQuestions = (modelNum === 11 || modelNum === 12 || modelNum === 13 || modelNum === 14) ? 30 : 50; 
           const progressPercent = (answeredCount / totalQuestions) * 100;
 
           return (
@@ -2092,7 +2092,7 @@ const MinistryModelsScreen: React.FC<{
                   <CheckCircle2 className="w-3 h-3 text-white" />
                 </motion.div>
               )}
-              {(modelNum === 11 || modelNum === 12) && (
+              {(modelNum === 11 || modelNum === 12 || modelNum === 13 || modelNum === 14) && (
                 <motion.div
                   animate={{ opacity: [1, 0, 1] }}
                   transition={{ repeat: Infinity, duration: 1, times: [0, 0.5, 1] }}
@@ -2102,7 +2102,7 @@ const MinistryModelsScreen: React.FC<{
                 </motion.div>
               )}
               <span className={`font-bold text-xs relative z-10 ${isFullMark ? 'text-white' : 'text-slate-800'}`}>
-                نموذج {modelNum}{(modelNum === 11 || modelNum === 12) ? ' (وزارة)' : ''}
+                نموذج {modelNum}{modelNum === 14 ? ' (المتجهات)' : modelNum === 13 ? ' (التجريبي)' : (modelNum === 11 || modelNum === 12) ? ' (وزارة)' : ''}
               </span>
               {!isFullMark && progressPercent > 0 && (
                 <span className="text-[9px] font-bold text-yellow-950 mt-1 relative z-10">
@@ -2188,10 +2188,34 @@ const AdvancedExamScreen: React.FC<{
   const [showResultExitConfirm, setShowResultExitConfirm] = useState(false);
   const [showTimeoutModal, setShowTimeoutModal] = useState(false);
   const [expandedExplanations, setExpandedExplanations] = useState<Record<number, boolean>>({});
+  const [resultFilter, setResultFilter] = useState<'all' | 'correct' | 'incorrect'>('all');
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const printableRef = useRef<HTMLDivElement>(null);
   const hasAnsweredQuestions = remoteProgress?.userAnswers && Object.keys(remoteProgress.userAnswers).length > 0;
   const [showContinueModal, setShowContinueModal] = useState(!!remoteProgress && !isRandom && !!hasAnsweredQuestions);
+
+  // Calculate stats for filtering
+  const correctCount = useMemo(() => {
+    return questions.filter((q, qIdx) => {
+      const userAnswer = userAnswers[qIdx];
+      return userAnswer !== undefined && userAnswer === q.correctAnswerIndex;
+    }).length;
+  }, [questions, userAnswers]);
+
+  const incorrectCount = useMemo(() => {
+    return questions.length - correctCount;
+  }, [questions, correctCount]);
+
+  const hasFilteredQuestions = useMemo(() => {
+    return questions.some((q, qIdx) => {
+      const userAnswer = userAnswers[qIdx];
+      const isSkipped = userAnswer === undefined;
+      const isCorrect = !isSkipped && userAnswer === q.correctAnswerIndex;
+      if (resultFilter === 'correct') return isCorrect;
+      if (resultFilter === 'incorrect') return !isCorrect;
+      return true;
+    });
+  }, [questions, userAnswers, resultFilter]);
 
   const handleContinue = () => {
     if (initialLocalProgress) {
@@ -2257,7 +2281,7 @@ const AdvancedExamScreen: React.FC<{
 
         const options: any = {
           margin: 0,
-          filename: `نموذج_وزاري_${examId}.pdf`,
+          filename: `${examId === 14 ? 'نموذج_المتجهات' : examId === 13 ? 'نموذج_تجريبي' : 'نموذج_وزاري'}_${examId}.pdf`,
           image: { type: 'jpeg', quality: 1.0 },
           html2canvas: { 
             scale: 2, 
@@ -2391,6 +2415,24 @@ const AdvancedExamScreen: React.FC<{
         setLoading(false);
         return;
       }
+
+      // Handle Model 13 (Ministry) as a special case with a specific URL
+      if (examId === 13 && !isRandom) {
+        const ministryUrl = "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/MATH_Expect13.json";
+        const fetchedQuestions = await fetchAndCacheExam(ministryUrl);
+        setQuestions(fetchedQuestions);
+        setLoading(false);
+        return;
+      }
+
+      // Handle Model 14 (Ministry) as a special case with a specific URL
+      if (examId === 14 && !isRandom) {
+        const ministryUrl = "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/MATH_Expect14.json";
+        const fetchedQuestions = await fetchAndCacheExam(ministryUrl);
+        setQuestions(fetchedQuestions);
+        setLoading(false);
+        return;
+      }
       
       const allFetchedQuestions: Question[] = [];
       const usedKeys = new Set<string>();
@@ -2509,16 +2551,16 @@ const AdvancedExamScreen: React.FC<{
       <div className="min-h-screen bg-[#e8d5c4] flex flex-col items-center justify-center p-6 text-center">
         <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
         <h2 className="text-xl font-bold text-slate-800">
-          {(examId === 11 || examId === 12) ? "جاري تحميل النموذج الوزاري..." : "جاري موازنة الأسئلة وتحميل النموذج..."}
+          {examId === 14 ? "جاري تحميل نموذج المتجهات..." : examId === 13 ? "جاري تحميل النموذج التجريبي..." : (examId === 11 || examId === 12) ? "جاري تحميل النموذج الوزاري..." : "جاري موازنة الأسئلة وتحميل النموذج..."}
         </h2>
         <p className="text-slate-500 mt-2">
-          {(examId === 11 || examId === 12) ? "يرجى الانتظار، جاري تحميل أسئلة النموذج الوزاري..." : "يرجى الانتظار، جاري تجميع 50 سؤالاً من جميع الوحدات"}
+          {examId === 14 ? "يرجى الانتظار، جاري تحميل أسئلة نموذج المتجهات..." : examId === 13 ? "يرجى الانتظار، جاري تحميل أسئلة النموذج التجريبي..." : (examId === 11 || examId === 12) ? "يرجى الانتظار، جاري تحميل أسئلة النموذج الوزاري..." : "يرجى الانتظار، جاري تجميع 50 سؤالاً من جميع الوحدات"}
         </p>
       </div>
     );
   }
 
-  const requiredCount = (examId === 11 || examId === 12) ? 30 : 50;
+  const requiredCount = (examId === 11 || examId === 12 || examId === 13 || examId === 14) ? 30 : 50;
   if (error || questions.length < requiredCount) {
     return (
       <div className="min-h-screen bg-[#e8d5c4] flex flex-col items-center justify-center p-6 text-center">
@@ -2536,20 +2578,21 @@ const AdvancedExamScreen: React.FC<{
   };
 
   const calculateScore = () => {
-    let s = 0;
+    if (questions.length === 0) return 0;
+    let correct = 0;
     questions.forEach((q, i) => {
       if (userAnswers[i] === q.correctAnswerIndex) {
-        s += 4;
+        correct += 1;
       }
     });
-    return s;
+    return Math.round((correct / questions.length) * 200);
   };
 
   const finishExam = async () => {
     setCurrentStep('result');
     
     const finalScore = calculateScore();
-    const maxScore = questions.length * 4;
+    const maxScore = 200;
     if (!isRandom && onSaveFullMark && finalScore === maxScore) {
       onSaveFullMark(examKey);
     }
@@ -2573,7 +2616,7 @@ const AdvancedExamScreen: React.FC<{
   };
 
   const finalScore = calculateScore();
-  const maxScore = questions.length * 4;
+  const maxScore = 200;
 
   const optionLetters = ['a', 'b', 'c', 'd', 'e', 'f'];
 
@@ -2782,6 +2825,45 @@ const AdvancedExamScreen: React.FC<{
                   الرئيسية
                 </button>
               </div>
+
+              {/* Filter Buttons */}
+              <div className="w-full h-[1px] bg-slate-100 my-4 relative z-10"></div>
+              
+              <div className="space-y-2 relative z-10">
+                <div className="text-[10px] font-black text-slate-400 font-mohand uppercase tracking-widest text-center mb-1">فرز مراجعة الأسئلة</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setResultFilter(resultFilter === 'correct' ? 'all' : 'correct')}
+                    className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all font-mohand ${
+                      resultFilter === 'correct'
+                        ? 'bg-green-600 text-white border-green-600 shadow-md'
+                        : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                    }`}
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>الصحيحة ({correctCount})</span>
+                  </button>
+                  <button
+                    onClick={() => setResultFilter(resultFilter === 'incorrect' ? 'all' : 'incorrect')}
+                    className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all font-mohand ${
+                      resultFilter === 'incorrect'
+                        ? 'bg-red-600 text-white border-red-600 shadow-md'
+                        : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                    }`}
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                    <span>الخاطئة ({incorrectCount})</span>
+                  </button>
+                </div>
+                {resultFilter !== 'all' && (
+                  <button
+                    onClick={() => setResultFilter('all')}
+                    className="w-full py-1 text-[10px] text-blue-600 font-bold hover:text-blue-700 hover:underline transition-colors text-center block font-mohand"
+                  >
+                    عرض جميع الأسئلة ({questions.length})
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Questions Review Section */}
@@ -2790,14 +2872,34 @@ const AdvancedExamScreen: React.FC<{
                 <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center text-blue-500">
                   <GraduationCap className="w-6 h-6" />
                 </div>
-                <h3 className="text-2xl font-bold text-slate-800 font-mohand">مراجعة الاختبار</h3>
+                <h3 className="text-2xl font-bold text-slate-800 font-mohand">
+                  {resultFilter === 'correct' ? 'مراجعة الإجابات الصحيحة' : resultFilter === 'incorrect' ? 'مراجعة الإجابات الخاطئة' : 'مراجعة الاختبار'}
+                </h3>
               </div>
+
+              {!hasFilteredQuestions && (
+                <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-100 text-center text-slate-500 font-mohand flex flex-col items-center justify-center gap-2 max-w-[320px] mx-auto">
+                  <span className="text-3xl">🎉</span>
+                  <p className="font-bold text-sm">
+                    {resultFilter === 'correct' ? 'لا توجد إجابات صحيحة بعد. استمر في المحاولة!' : 'رائع! لا توجد أي إجابات خاطئة لمراجعتها.'}
+                  </p>
+                  <button
+                    onClick={() => setResultFilter('all')}
+                    className="mt-2 text-xs text-blue-600 font-bold hover:underline"
+                  >
+                    عرض التقييم الكامل
+                  </button>
+                </div>
+              )}
 
               {questions.map((q, qIdx) => {
                 const userAnswer = userAnswers[qIdx];
                 const isSkipped = userAnswer === undefined;
                 const isCorrect = !isSkipped && userAnswer === q.correctAnswerIndex;
                 const isExpanded = expandedExplanations[qIdx];
+
+                if (resultFilter === 'correct' && !isCorrect) return null;
+                if (resultFilter === 'incorrect' && isCorrect) return null;
 
                 return (
                   <div key={qIdx} className="space-y-4 no-print">
@@ -2946,7 +3048,7 @@ const AdvancedExamScreen: React.FC<{
                 }}>
                   {pageIdx === 0 && (
                     <div className="pb-3 mb-5 text-center shrink-0" style={{ borderBottom: '2px solid #2563eb' }}>
-                      <h1 className="text-xl font-black mb-1" style={{ color: '#0f172a' }}>{isRandom ? 'نموذج وزاري عشوائي' : `النموذج الوزاري رقم ${examId}`}</h1>
+                      <h1 className="text-xl font-black mb-1" style={{ color: '#0f172a' }}>{isRandom ? 'نموذج وزاري عشوائي' : examId === 14 ? `نموذج المتجهات رقم ${examId}` : examId === 13 ? `النموذج التجريبي رقم ${examId}` : `النموذج الوزاري رقم ${examId}`}</h1>
                       <p className="font-bold mt-2 text-[11px]" style={{ color: '#94a3b8' }}>منصة الشامل في الرياضيات - جيل 2008</p>
                     </div>
                   )}
@@ -3225,8 +3327,35 @@ const ExamScreen: React.FC<{
   const [showTimeoutModal, setShowTimeoutModal] = useState(false);
   const [extraMinutes, setExtraMinutes] = useState(10);
   const [expandedExplanations, setExpandedExplanations] = useState<Record<number, boolean>>({});
+  const [resultFilter, setResultFilter] = useState<'all' | 'correct' | 'incorrect'>('all');
   const [isEditingTime, setIsEditingTime] = useState(false);
   const [tempTimeInput, setTempTimeInput] = useState("");
+
+  // Calculate stats for filtering in standard ExamScreen
+  const correctCount = useMemo(() => {
+    if (!examData) return 0;
+    return examData.questions.filter((q, qIdx) => {
+      const userAnswer = userAnswers[qIdx];
+      return userAnswer !== undefined && userAnswer === q.correctAnswerIndex;
+    }).length;
+  }, [examData, userAnswers]);
+
+  const incorrectCount = useMemo(() => {
+    if (!examData) return 0;
+    return examData.questions.length - correctCount;
+  }, [examData, correctCount]);
+
+  const hasFilteredQuestions = useMemo(() => {
+    if (!examData) return false;
+    return examData.questions.some((q, qIdx) => {
+      const userAnswer = userAnswers[qIdx];
+      const isSkipped = userAnswer === undefined;
+      const isCorrect = !isSkipped && userAnswer === q.correctAnswerIndex;
+      if (resultFilter === 'correct') return isCorrect;
+      if (resultFilter === 'incorrect') return !isCorrect;
+      return true;
+    });
+  }, [examData, userAnswers, resultFilter]);
 
   // Sync state to localStorage
   useEffect(() => {
@@ -3892,6 +4021,45 @@ const ExamScreen: React.FC<{
                   الرئيسية
                 </button>
               </div>
+
+              {/* Filter Buttons */}
+              <div className="w-full h-[1px] bg-slate-100 my-4 relative z-10"></div>
+              
+              <div className="space-y-2 relative z-10">
+                <div className="text-[10px] font-black text-slate-400 font-mohand uppercase tracking-widest text-center mb-1">فرز مراجعة الأسئلة</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setResultFilter(resultFilter === 'correct' ? 'all' : 'correct')}
+                    className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all font-mohand ${
+                      resultFilter === 'correct'
+                        ? 'bg-green-600 text-white border-green-600 shadow-md'
+                        : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                    }`}
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>الصحيحة ({correctCount})</span>
+                  </button>
+                  <button
+                    onClick={() => setResultFilter(resultFilter === 'incorrect' ? 'all' : 'incorrect')}
+                    className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all font-mohand ${
+                      resultFilter === 'incorrect'
+                        ? 'bg-red-600 text-white border-red-600 shadow-md'
+                        : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                    }`}
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                    <span>الخاطئة ({incorrectCount})</span>
+                  </button>
+                </div>
+                {resultFilter !== 'all' && (
+                  <button
+                    onClick={() => setResultFilter('all')}
+                    className="w-full py-1 text-[10px] text-blue-600 font-bold hover:text-blue-700 hover:underline transition-colors text-center block font-mohand"
+                  >
+                    عرض جميع الأسئلة ({examData?.questions.length || 0})
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Questions Review Section */}
@@ -3900,14 +4068,34 @@ const ExamScreen: React.FC<{
                 <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center text-blue-500">
                   <GraduationCap className="w-6 h-6" />
                 </div>
-                <h3 className="text-2xl font-bold text-slate-800 font-mohand">مراجعة الاختبار</h3>
+                <h3 className="text-2xl font-bold text-slate-800 font-mohand">
+                  {resultFilter === 'correct' ? 'مراجعة الإجابات الصحيحة' : resultFilter === 'incorrect' ? 'مراجعة الإجابات الخاطئة' : 'مراجعة الاختبار'}
+                </h3>
               </div>
+
+              {!hasFilteredQuestions && (
+                <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-100 text-center text-slate-500 font-mohand flex flex-col items-center justify-center gap-2 max-w-[320px] mx-auto">
+                  <span className="text-3xl">🎉</span>
+                  <p className="font-bold text-sm">
+                    {resultFilter === 'correct' ? 'لا توجد إجابات صحيحة بعد. استمر في المحاولة!' : 'رائع! لا توجد أي إجابات خاطئة لمراجعتها.'}
+                  </p>
+                  <button
+                    onClick={() => setResultFilter('all')}
+                    className="mt-2 text-xs text-blue-600 font-bold hover:underline"
+                  >
+                    عرض التقييم الكامل
+                  </button>
+                </div>
+              )}
 
               {examData?.questions.map((q, qIdx) => {
                 const userAnswer = userAnswers[qIdx];
                 const isSkipped = userAnswer === undefined;
                 const isCorrect = !isSkipped && userAnswer === q.correctAnswerIndex;
                 const isExpanded = expandedExplanations[qIdx];
+
+                if (resultFilter === 'correct' && !isCorrect) return null;
+                if (resultFilter === 'incorrect' && isCorrect) return null;
 
                 return (
                   <div key={qIdx} className="space-y-4 no-print">
