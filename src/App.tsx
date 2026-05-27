@@ -2052,13 +2052,13 @@ const MinistryModelsScreen: React.FC<{
       </header>
 
       <div className="grid grid-cols-3 gap-2">
-        {Array.from({ length: 14 }).map((_, i) => {
+        {Array.from({ length: 15 }).map((_, i) => {
           const modelNum = i + 1;
           const examKey = `ADV_MODEL_${modelNum}`;
           const isFullMark = fullMarkExams.includes(examKey);
           const progress = examProgress[examKey];
           const answeredCount = progress?.userAnswers ? Object.keys(progress.userAnswers).length : 0;
-          const totalQuestions = (modelNum === 11 || modelNum === 12 || modelNum === 13 || modelNum === 14) ? 30 : 50; 
+          const totalQuestions = modelNum === 15 ? 20 : (modelNum === 11 || modelNum === 12 || modelNum === 13 || modelNum === 14) ? 30 : 50; 
           const progressPercent = (answeredCount / totalQuestions) * 100;
 
           return (
@@ -2092,7 +2092,7 @@ const MinistryModelsScreen: React.FC<{
                   <CheckCircle2 className="w-3 h-3 text-white" />
                 </motion.div>
               )}
-              {(modelNum === 11 || modelNum === 12 || modelNum === 13 || modelNum === 14) && (
+              {(modelNum === 11 || modelNum === 12 || modelNum === 13 || modelNum === 14 || modelNum === 15) && (
                 <motion.div
                   animate={{ opacity: [1, 0, 1] }}
                   transition={{ repeat: Infinity, duration: 1, times: [0, 0.5, 1] }}
@@ -2102,7 +2102,7 @@ const MinistryModelsScreen: React.FC<{
                 </motion.div>
               )}
               <span className={`font-bold text-xs relative z-10 ${isFullMark ? 'text-white' : 'text-slate-800'}`}>
-                نموذج {modelNum}{modelNum === 14 ? ' (المتجهات)' : modelNum === 13 ? ' (التجريبي)' : (modelNum === 11 || modelNum === 12) ? ' (وزارة)' : ''}
+                نموذج {modelNum}{modelNum === 15 ? ' (وزاري)' : modelNum === 14 ? ' (المتجهات)' : modelNum === 13 ? ' (التجريبي)' : (modelNum === 11 || modelNum === 12) ? ' (وزارة)' : ''}
               </span>
               {!isFullMark && progressPercent > 0 && (
                 <span className="text-[9px] font-bold text-yellow-950 mt-1 relative z-10">
@@ -2281,7 +2281,7 @@ const AdvancedExamScreen: React.FC<{
 
         const options: any = {
           margin: 0,
-          filename: `${examId === 14 ? 'نموذج_المتجهات' : examId === 13 ? 'نموذج_تجريبي' : 'نموذج_وزاري'}_${examId}.pdf`,
+          filename: `${examId === 15 ? 'نموذج_وزاري' : examId === 14 ? 'نموذج_المتجهات' : examId === 13 ? 'نموذج_تجريبي' : 'نموذج_وزاري'}_${examId}.pdf`,
           image: { type: 'jpeg', quality: 1.0 },
           html2canvas: { 
             scale: 2, 
@@ -2433,6 +2433,15 @@ const AdvancedExamScreen: React.FC<{
         setLoading(false);
         return;
       }
+
+      // Handle Model 15 (Ministry) as a special case with a specific URL
+      if (examId === 15 && !isRandom) {
+        const ministryUrl = "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/MATH_Expext15.json";
+        const fetchedQuestions = await fetchAndCacheExam(ministryUrl);
+        setQuestions(fetchedQuestions);
+        setLoading(false);
+        return;
+      }
       
       const allFetchedQuestions: Question[] = [];
       const usedKeys = new Set<string>();
@@ -2551,16 +2560,16 @@ const AdvancedExamScreen: React.FC<{
       <div className="min-h-screen bg-[#e8d5c4] flex flex-col items-center justify-center p-6 text-center">
         <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
         <h2 className="text-xl font-bold text-slate-800">
-          {examId === 14 ? "جاري تحميل نموذج المتجهات..." : examId === 13 ? "جاري تحميل النموذج التجريبي..." : (examId === 11 || examId === 12) ? "جاري تحميل النموذج الوزاري..." : "جاري موازنة الأسئلة وتحميل النموذج..."}
+          {examId === 15 ? "جاري تحميل النموذج الخامس عشر..." : examId === 14 ? "جاري تحميل نموذج المتجهات..." : examId === 13 ? "جاري تحميل النموذج التجريبي..." : (examId === 11 || examId === 12) ? "جاري تحميل النموذج الوزاري..." : "جاري موازنة الأسئلة وتحميل النموذج..."}
         </h2>
         <p className="text-slate-500 mt-2">
-          {examId === 14 ? "يرجى الانتظار، جاري تحميل أسئلة نموذج المتجهات..." : examId === 13 ? "يرجى الانتظار، جاري تحميل أسئلة النموذج التجريبي..." : (examId === 11 || examId === 12) ? "يرجى الانتظار، جاري تحميل أسئلة النموذج الوزاري..." : "يرجى الانتظار، جاري تجميع 50 سؤالاً من جميع الوحدات"}
+          {examId === 15 ? "يرجى الانتظار، جاري تحميل أسئلة النموذج الخامس عشر..." : examId === 14 ? "يرجى الانتظار، جاري تحميل أسئلة نموذج المتجهات..." : examId === 13 ? "يرجى الانتظار، جاري تحميل أسئلة النموذج التجريبي..." : (examId === 11 || examId === 12) ? "يرجى الانتظار، جاري تحميل أسئلة النموذج الوزاري..." : "يرجى الانتظار، جاري تجميع 50 سؤالاً من جميع الوحدات"}
         </p>
       </div>
     );
   }
 
-  const requiredCount = (examId === 11 || examId === 12 || examId === 13 || examId === 14) ? 30 : 50;
+  const requiredCount = examId === 15 ? 20 : (examId === 11 || examId === 12 || examId === 13 || examId === 14) ? 30 : 50;
   if (error || questions.length < requiredCount) {
     return (
       <div className="min-h-screen bg-[#e8d5c4] flex flex-col items-center justify-center p-6 text-center">
@@ -3048,7 +3057,7 @@ const AdvancedExamScreen: React.FC<{
                 }}>
                   {pageIdx === 0 && (
                     <div className="pb-3 mb-5 text-center shrink-0" style={{ borderBottom: '2px solid #2563eb' }}>
-                      <h1 className="text-xl font-black mb-1" style={{ color: '#0f172a' }}>{isRandom ? 'نموذج وزاري عشوائي' : examId === 14 ? `نموذج المتجهات رقم ${examId}` : examId === 13 ? `النموذج التجريبي رقم ${examId}` : `النموذج الوزاري رقم ${examId}`}</h1>
+                      <h1 className="text-xl font-black mb-1" style={{ color: '#0f172a' }}>{isRandom ? 'نموذج وزاري عشوائي' : examId === 15 ? `النموذج الوزاري رقم ${examId}` : examId === 14 ? `نموذج المتجهات رقم ${examId}` : examId === 13 ? `النموذج التجريبي رقم ${examId}` : `النموذج الوزاري رقم ${examId}`}</h1>
                       <p className="font-bold mt-2 text-[11px]" style={{ color: '#94a3b8' }}>منصة الشامل في الرياضيات - جيل 2008</p>
                     </div>
                   )}
