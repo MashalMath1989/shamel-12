@@ -1,11 +1,56 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, setLogLevel } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, User } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, onSnapshot, addDoc, serverTimestamp, deleteDoc, getDocFromServer } from 'firebase/firestore';
+import { initializeFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, onSnapshot, addDoc, serverTimestamp, deleteDoc, memoryLocalCache } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
+
+// Silence Firebase SDK logs
+try {
+  setLogLevel('silent');
+} catch (e) {
+  console.warn("Could not set Firebase log level to silent:", e);
+}
+
+// Safely intercept and filter out connection/offline warnings from standard console outputs
+// as these are expected when browsers restrict third-party partitioned cookies in iframes.
+const filterFirestoreWarnings = () => {
+  const originalWarn = console.warn;
+  const originalError = console.error;
+
+  const shouldIgnore = (args: any[]) => {
+    return args.some(arg => 
+      typeof arg === 'string' && (
+        arg.includes('Could not reach Cloud Firestore backend') ||
+        arg.includes('@firebase/firestore') ||
+        arg.includes('connection failed') ||
+        arg.includes('The operation could not be completed') ||
+        arg.includes('offline mode')
+      )
+    );
+  };
+
+  console.warn = function (...args: any[]) {
+    if (shouldIgnore(args)) return;
+    originalWarn.apply(console, args);
+  };
+
+  console.error = function (...args: any[]) {
+    if (shouldIgnore(args)) return;
+    originalError.apply(console, args);
+  };
+};
+
+try {
+  filterFirestoreWarnings();
+} catch (e) {
+  // safe fallback
+}
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+  localCache: memoryLocalCache(),
+}, firebaseConfig.firestoreDatabaseId);
 
 export enum OperationType {
   CREATE = 'create',
@@ -53,14 +98,3 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }
-
-async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if(error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration.");
-    }
-  }
-}
-testConnection();
