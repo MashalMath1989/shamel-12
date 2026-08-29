@@ -17,7 +17,8 @@ import {
   ResourcePdfModal, 
   useSemesterSources, 
   LessonResourcesRow, 
-  UnitResourcesRow 
+  UnitResourcesRow,
+  isValidResourceUrl
 } from './components/ResourcesViewer';
 import { ResourceItem, ActiveResourceModalState } from './types/resources';
 
@@ -1176,7 +1177,7 @@ const fetchAndCacheExam = async (url: string): Promise<Question[]> => {
     const text = await res.text();
     
     // Clean the text from any potential BOM, non-breaking spaces, or leading/trailing garbage
-    const cleanText = text
+    const cleanText = String(text || '')
       .trim()
       .replace(/^\uFEFF/, '') // Remove BOM
       .replace(/\u00A0/g, ' ') // Replace non-breaking spaces with normal spaces
@@ -1224,17 +1225,18 @@ const fetchAndCacheExam = async (url: string): Promise<Question[]> => {
     let rawQuestions = [];
     if (Array.isArray(data)) {
       rawQuestions = data;
-    } else if (data.questions && Array.isArray(data.questions)) {
+    } else if (data && data.questions && Array.isArray(data.questions)) {
       rawQuestions = data.questions;
-    } else if (data.items && Array.isArray(data.items)) {
+    } else if (data && data.items && Array.isArray(data.items)) {
       rawQuestions = data.items;
     } else {
       throw new Error('تنسيق البيانات غير مدعوم');
     }
     
     const normalizedQuestions: Question[] = rawQuestions.map((q: any, idx: number) => {
-      const options = q.choices || q.options || [];
-      let correctAnswer = q.correct_answer || q.correctAnswer;
+      const rawOptions = Array.isArray(q?.choices) ? q.choices : (Array.isArray(q?.options) ? q.options : []);
+      const options: string[] = rawOptions.map((opt: any) => String(opt ?? ''));
+      let correctAnswer = q?.correct_answer ?? q?.correctAnswer;
       let correctAnswerIndex = -1;
       
       if (typeof correctAnswer === 'string' && correctAnswer.length === 1) {
@@ -1244,16 +1246,20 @@ const fetchAndCacheExam = async (url: string): Promise<Question[]> => {
       } else if (typeof correctAnswer === 'number') {
         correctAnswerIndex = correctAnswer;
       } else if (typeof correctAnswer === 'string' && options.length > 0) {
-        correctAnswerIndex = options.findIndex((opt: string) => opt.trim() === correctAnswer.trim());
+        const targetTrim = correctAnswer.trim();
+        correctAnswerIndex = options.findIndex((opt: string) => opt.trim() === targetTrim);
+        if (correctAnswerIndex === -1) {
+          correctAnswerIndex = options.findIndex((opt: string) => opt.trim().toLowerCase() === targetTrim.toLowerCase());
+        }
       }
 
       return {
-        question: q.question || `سؤال رقم ${idx + 1}`,
+        question: q?.question || `سؤال رقم ${idx + 1}`,
         options: options,
         correctAnswerIndex: correctAnswerIndex,
-        explanation: q.explanation || q.hint || '',
-        has_image: q.has_image || false,
-        image_url: q.image_url || ''
+        explanation: q?.explanation || q?.hint || '',
+        has_image: q?.has_image || false,
+        image_url: q?.image_url || ''
       };
     });
 
@@ -1547,7 +1553,8 @@ const MathText: React.FC<{
   const mathRegex = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\begin\{[a-zA-Z]*\*?\}[\s\S]*?\\end\{[a-zA-Z]*\*?\}|\$.*?\$|\\\([\s\S]*?\\\))/g;
   
   // NEW: Detect if the input itself is naked LaTeX but missing delimiters (common in some JSON data)
-  const isNakedLaTeX = (str: string) => {
+  const isNakedLaTeX = (str?: any) => {
+    if (!str || typeof str !== 'string') return false;
     const s = str.trim();
     // If it contains typical LaTeX commands and no delimiters, it's probably naked LaTeX
     return s.includes('\\left') || s.includes('\\right') || 
@@ -1569,7 +1576,8 @@ const MathText: React.FC<{
   const parts = processedText.split(mathRegex);
 
   // Helper to clean up invalid LaTeX commands inside math mode
-  const cleanMathContent = (content: string) => {
+  const cleanMathContent = (content?: any) => {
+    if (!content || typeof content !== 'string') return '';
     return content
       .replace(/\\\\\(/g, '(')
       .replace(/\\\\\)/g, ')')
@@ -1589,7 +1597,7 @@ const MathText: React.FC<{
   return (
     <div className={`math-text-container font-mohand leading-[2.2] w-full ${className} ${isOption ? 'text-left' : 'text-right'} ${scrollClasses} px-1 ${baseSize}`} dir={isOption ? "ltr" : "rtl"} style={{ color: '#1e293b' }}>
       {parts.map((part, index) => {
-        if (!part) return null;
+        if (!part || typeof part !== 'string') return null;
         
         const trimmedPart = part.trim();
         
@@ -1635,9 +1643,9 @@ const MathText: React.FC<{
 
           // Auto-align multi-equals equations if requested
           if (autoAlign && !mathContent.includes('\\begin') && (mathContent.match(/=/g) || []).length > 1) {
-            const parts = mathContent.split(/(?<!\\)=/g);
-            if (parts.length > 1) {
-              mathContent = `\\begin{aligned} ${parts[0].trim()} &= ${parts.slice(1).map(p => p.trim()).join(' \\\\ &= ')} \\end{aligned}`;
+            const eqParts = mathContent.split(/(?<!\\)=/g);
+            if (eqParts.length > 1) {
+              mathContent = `\\begin{aligned} ${(eqParts[0] || '').trim()} &= ${eqParts.slice(1).map(p => (p || '').trim()).join(' \\\\ &= ')} \\end{aligned}`;
               isBlock = true;
             }
           }
@@ -1658,8 +1666,8 @@ const MathText: React.FC<{
             const hasEquals = mathContent.includes('=');
             if (hasEquals) {
               const equalsIndex = mathContent.indexOf('=');
-              const leftExpr = mathContent.substring(0, equalsIndex).trim();
-              const rightExpr = mathContent.substring(equalsIndex + 1).trim();
+              const leftExpr = (mathContent.substring(0, equalsIndex) || '').trim();
+              const rightExpr = (mathContent.substring(equalsIndex + 1) || '').trim();
 
               const getTermsWithContext = (expr: string) => {
                 const terms: { op: string, content: string, hasMultiplicationParens: boolean }[] = [];
@@ -1681,8 +1689,9 @@ const MathText: React.FC<{
                   const dChange = updateDepth(expr, i);
                   
                   if (depth === 0 && dChange === 0 && (char === '+' || char === '-')) {
-                    if (current.trim().length > 0 || op.length > 0) {
-                      const content = current.trim();
+                    const cTrim = (current || '').trim();
+                    if (cTrim.length > 0 || op.length > 0) {
+                      const content = cTrim;
                       const hasParens = content.includes('(') || content.includes('\\left') || content.includes('[');
                       terms.push({ op, content, hasMultiplicationParens: hasParens });
                     }
@@ -1695,8 +1704,9 @@ const MathText: React.FC<{
                   }
                   depth += dChange;
                 }
-                if (current.trim().length > 0 || op.length > 0) {
-                  const content = current.trim();
+                const finalTrim = (current || '').trim();
+                if (finalTrim.length > 0 || op.length > 0) {
+                  const content = finalTrim;
                   const hasParens = content.includes('(') || content.includes('\\left') || content.includes('[');
                   terms.push({ op, content, hasMultiplicationParens: hasParens });
                 }
@@ -2827,6 +2837,50 @@ const FastPdfViewer: React.FC<FastPdfViewerProps> = ({ url, title }) => {
   );
 };
 
+export const formatFileSize = (size: any): string | null => {
+  if (size === undefined || size === null || size === '') return null;
+  if (typeof size === 'number') {
+    if (isNaN(size) || size <= 0) return null;
+    // If number is already small like 2.5 (already in MB)
+    if (size < 100 && !Number.isInteger(size)) {
+      return `${size.toFixed(1)} MB`;
+    }
+    // Convert bytes directly to MB
+    const mb = size / (1024 * 1024);
+    return `${mb < 0.1 ? '< 0.1' : mb.toFixed(1)} MB`;
+  }
+  if (typeof size === 'string') {
+    const s = size.trim();
+    if (!s) return null;
+    // If it is just a numeric string
+    if (/^\d+(\.\d+)?$/.test(s)) {
+      const num = parseFloat(s);
+      return formatFileSize(num);
+    }
+    // If it is in KB like "850 KB"
+    const kbMatch = s.match(/^([\d.]+)\s*kb$/i);
+    if (kbMatch) {
+      const kb = parseFloat(kbMatch[1]);
+      const mb = (kb / 1024).toFixed(1);
+      return `${mb} MB`;
+    }
+    // If it already has MB
+    const mbMatch = s.match(/^([\d.]+)\s*mb$/i);
+    if (mbMatch) {
+      return `${parseFloat(mbMatch[1]).toFixed(1)} MB`;
+    }
+    // If in bytes
+    const bMatch = s.match(/^([\d.]+)\s*b$/i);
+    if (bMatch) {
+      const b = parseFloat(bMatch[1]);
+      const mb = (b / (1024 * 1024)).toFixed(1);
+      return `${mb} MB`;
+    }
+    return s.toUpperCase().includes('MB') ? s : `${s} MB`;
+  }
+  return null;
+};
+
 const LibraryScreen: React.FC<{ 
   onBack: () => void;
 }> = ({ onBack }) => {
@@ -2834,7 +2888,8 @@ const LibraryScreen: React.FC<{
   const libraryUrl = 'https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/MATH12_Library.json';
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [selectedPdf, setSelectedPdf] = useState<{ title: string; pdfUrl: string } | null>(null);
+  const [selectedPdf, setSelectedPdf] = useState<{ title: string; pdfUrl: string; fileSize?: string } | null>(null);
+  const [dynamicSizes, setDynamicSizes] = useState<Record<string, string>>({});
 
   // Handle phone/browser back button to gracefully return to library listings from PDF view
   useEffect(() => {
@@ -2864,12 +2919,21 @@ const LibraryScreen: React.FC<{
     };
   }, [selectedPdf]);
 
+  const hasValidFileUrl = (exam: any): boolean => {
+    if (!exam) return false;
+    const rawUrl = exam.pdfUrl || exam.url || exam.fileUrl || exam.link || exam.downloadUrl;
+    return isValidResourceUrl(rawUrl);
+  };
+
   // Fallback / initial caching database for beautiful immediate previews
   const [pdfExams, setPdfExams] = useState<any[]>(() => {
     const cached = localStorage.getItem('cached_math12_library_data');
     if (cached) {
       try {
-        return JSON.parse(cached);
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(hasValidFileUrl);
+        }
       } catch (e) {}
     }
     return [
@@ -2877,28 +2941,70 @@ const LibraryScreen: React.FC<{
         semester: "الفصل الأول",
         title: "امتحان تجريبي شامل - الفصل الدراسي الأول",
         thumbnail: "https://raw.githubusercontent.com/MashalMath/Pdf_Library/main/Shamel12_Library_Cover.jpg",
-        pdfUrl: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/PDFs/S1_Exam_2026.pdf"
+        pdfUrl: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/PDFs/S1_Exam_2026.pdf",
+        fileSize: "2.4 MB"
       },
       {
         semester: "الفصل الأول",
         title: "الامتحان الوزاري الرسمي مقترحات - الفصل الأول 2025",
         thumbnail: "",
-        pdfUrl: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/PDFs/S1_Ministry_2025.pdf"
+        pdfUrl: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/PDFs/S1_Ministry_2025.pdf",
+        fileSize: "1.8 MB"
       },
       {
         semester: "الفصل الثاني",
         title: "امتحان تجريبي شامل - الفصل الدراسي الثاني",
         thumbnail: "",
-        pdfUrl: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/PDFs/S2_Exam_2026.pdf"
+        pdfUrl: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/PDFs/S2_Exam_2026.pdf",
+        fileSize: "2.1 MB"
       },
       {
         semester: "الفصلين",
         title: "الامتحان التجريبي الشامل الموحد للفصلين معاً",
         thumbnail: "",
-        pdfUrl: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/PDFs/Full_Unified_Exam_2026.pdf"
+        pdfUrl: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/PDFs/Full_Unified_Exam_2026.pdf",
+        fileSize: "3.6 MB"
       }
-    ];
+    ].filter(hasValidFileUrl);
   });
+
+  // Query Content-Length for files if explicit size is not given in JSON
+  useEffect(() => {
+    if (!pdfExams || pdfExams.length === 0) return;
+
+    const controller = new AbortController();
+
+    pdfExams.forEach(async (exam) => {
+      const explicitSize = exam.fileSize || exam.size || exam.sizeText || exam.sizeMB || exam.file_size || exam.size_bytes;
+      if (explicitSize) return;
+
+      const rawUrl = exam.pdfUrl || exam.url || exam.fileUrl;
+      if (!rawUrl || !isValidResourceUrl(rawUrl)) return;
+
+      try {
+        const res = await fetch(rawUrl, {
+          method: 'HEAD',
+          signal: controller.signal
+        });
+        if (res.ok) {
+          const len = res.headers.get('content-length');
+          if (len) {
+            const bytes = parseInt(len, 10);
+            if (!isNaN(bytes) && bytes > 0) {
+              const formatted = formatFileSize(bytes);
+              if (formatted) {
+                setDynamicSizes(prev => ({ ...prev, [rawUrl]: formatted }));
+              }
+            }
+          }
+        }
+      } catch (e) {}
+    });
+
+    return () => {
+      controller.abort();
+    };
+  }, [pdfExams]);
 
   const loadLibraryData = async () => {
     setLoading(true);
@@ -2916,8 +3022,9 @@ const LibraryScreen: React.FC<{
       
       const data = JSON.parse(cleanText);
       if (Array.isArray(data)) {
-        setPdfExams(data);
-        localStorage.setItem('cached_math12_library_data', JSON.stringify(data));
+        const validExams = data.filter(hasValidFileUrl);
+        setPdfExams(validExams);
+        localStorage.setItem('cached_math12_library_data', JSON.stringify(validExams));
       } else {
         throw new Error("تنسيق ملف JSON غير صحيح، يجب أن يكون مصفوفة من العناصر (Array).");
       }
@@ -2935,9 +3042,9 @@ const LibraryScreen: React.FC<{
     loadLibraryData();
   }, []);
 
-  // Filter dynamic exams
-  const matchesFilter = (semesterField: string, filter: 'semester1' | 'semester2' | 'both') => {
-    const val = (semesterField || "").trim();
+  // Filter dynamic exams - only include exams that have a valid URL and match the semester filter
+  const matchesFilter = (semesterField?: any, filter: 'semester1' | 'semester2' | 'both' = 'semester1') => {
+    const val = String(semesterField || "").trim();
     if (filter === 'semester1') {
       return val === 'semester1' || val === 'الفصل الأول' || val === 'الفصل الاول' || val.includes('الأول') || val.includes('الاول');
     }
@@ -2950,22 +3057,23 @@ const LibraryScreen: React.FC<{
     return false;
   };
 
-  const filteredExams = pdfExams.filter(exam => matchesFilter(exam.semester, activeFilter));
+  const filteredExams = (pdfExams || []).filter(exam => hasValidFileUrl(exam) && matchesFilter(exam?.semester, activeFilter));
 
-  const isPlaceholderImage = (url?: string) => {
-    if (!url) return true;
+  const isPlaceholderImage = (url?: any) => {
+    if (!url || typeof url !== 'string') return true;
     const u = url.trim();
     return u === "" || u.includes("رابط_الصورة") || u.startsWith("placeholder") || !u.startsWith("http");
   };
 
   // If a PDF is selected to be shown in-app via active built-in viewer
   if (selectedPdf) {
-    const resolvedUrl = selectedPdf.pdfUrl.trim();
+    const rawPdfUrl = selectedPdf.pdfUrl || (selectedPdf as any).url || "";
+    const resolvedUrl = typeof rawPdfUrl === 'string' ? rawPdfUrl.trim() : String(rawPdfUrl || '').trim();
     const isMockUrl = resolvedUrl.startsWith("رابط_الملف") || resolvedUrl === "" || !resolvedUrl.startsWith("http");
 
     // Dynamic File Type check (PDF vs DOC/Word)
     const lowerUrl = resolvedUrl.toLowerCase();
-    const lowerTitle = selectedPdf.title.toLowerCase();
+    const lowerTitle = String(selectedPdf.title || "").toLowerCase();
     const isDoc = lowerUrl.endsWith(".doc") || lowerUrl.endsWith(".docx") || lowerUrl.includes(".doc?") || lowerUrl.includes(".docx?") || lowerTitle.includes("word") || lowerTitle.includes("وورد") || lowerTitle.includes("docx") || lowerTitle.includes("doc");
 
     return (
@@ -3003,10 +3111,15 @@ const LibraryScreen: React.FC<{
                   ? "bg-blue-600 hover:bg-blue-700 border border-blue-700" 
                   : "bg-red-600 hover:bg-red-700 border border-red-700"
               }`}
-              title={isDoc ? "تحميل مستند Word DOCX" : "تحميل مستند PDF"}
+              title={isDoc ? `تحميل مستند Word DOCX ${selectedPdf.fileSize ? `(${selectedPdf.fileSize})` : ''}` : `تحميل مستند PDF ${selectedPdf.fileSize ? `(${selectedPdf.fileSize})` : ''}`}
             >
               <Download className="w-4 h-4" />
               <span>تحميل {isDoc ? "Word" : "PDF"}</span>
+              {selectedPdf.fileSize && (
+                <span className="text-[10px] bg-black/20 px-1.5 py-0.5 rounded font-bold" dir="ltr">
+                  {selectedPdf.fileSize}
+                </span>
+              )}
             </a>
           </div>
         </header>
@@ -3138,9 +3251,13 @@ const LibraryScreen: React.FC<{
           </div>
         ) : filteredExams.length > 0 ? (
           filteredExams.map((exam, index) => {
-            const fileUrl = (exam.pdfUrl || exam.url || "").trim().toLowerCase();
-            const examTitle = (exam.title || "").toLowerCase();
+            const rawFileUrl = exam?.pdfUrl || exam?.url || exam?.fileUrl || "";
+            const fileUrl = String(rawFileUrl).trim().toLowerCase();
+            const examTitle = String(exam?.title || "").toLowerCase();
             const isExamDoc = fileUrl.endsWith(".doc") || fileUrl.endsWith(".docx") || fileUrl.includes(".doc?") || fileUrl.includes(".docx?") || examTitle.includes("word") || examTitle.includes("وورد") || examTitle.includes("docx") || examTitle.includes("doc");
+
+            const explicitSize = exam?.fileSize || exam?.size || exam?.sizeText || exam?.sizeMB || exam?.file_size || exam?.size_bytes;
+            const displaySize = formatFileSize(explicitSize) || (rawFileUrl ? dynamicSizes[rawFileUrl] : null);
 
             return (
               <motion.div
@@ -3148,53 +3265,62 @@ const LibraryScreen: React.FC<{
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
-                onClick={() => setSelectedPdf({ title: exam.title, pdfUrl: exam.pdfUrl || exam.url })}
+                onClick={() => setSelectedPdf({ title: exam.title, pdfUrl: exam.pdfUrl || exam.url, fileSize: displaySize || undefined })}
                 className="bg-white rounded-xl p-4 shadow-sm border border-black flex items-center justify-between gap-4 group hover:shadow-md hover:bg-slate-50/50 cursor-pointer transition-all relative overflow-hidden text-right"
               >
                 {/* Outer item content */}
-                <div className="flex items-center gap-3.5 w-full">
+                <div className="flex items-center gap-3.5 flex-1 min-w-0">
                   
-                  {/* Visual Thumbnail or Gorgeous styled gradient Cover mock */}
-                  {isPlaceholderImage(exam.thumbnail) ? (
-                    <div className={`w-14 h-16 rounded-lg shadow-sm border border-black shrink-0 flex flex-col items-center justify-center text-white relative p-1 text-center ${
-                      isExamDoc
-                        ? 'bg-gradient-to-br from-blue-600 to-indigo-800'
-                        : activeFilter === 'semester1' 
-                        ? 'bg-gradient-to-br from-blue-700 to-indigo-900' 
-                        : activeFilter === 'semester2' 
-                        ? 'bg-gradient-to-br from-emerald-600 to-teal-800' 
-                        : 'bg-gradient-to-br from-purple-600 to-indigo-950'
-                    }`}>
-                      <FileText className="w-5 h-5 mb-0.5 opacity-90" />
-                      <span className="text-[8px] font-black tracking-widest uppercase">{isExamDoc ? 'WORD' : 'PDF'}</span>
-                      <div className="absolute bottom-1 right-1 left-1 bg-black/20 py-0.5 rounded text-[6px] font-bold overflow-hidden whitespace-nowrap text-ellipsis px-1">
-                        {activeFilter === 'semester1' ? 'فصل1' : activeFilter === 'semester2' ? 'فصل2' : 'شامل'}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="w-14 h-16 rounded-lg border border-black overflow-hidden bg-slate-50 shrink-0 shadow-sm relative">
-                      <img 
-                        src={exam.thumbnail} 
-                        alt={exam.title} 
-                        className="w-full h-full object-cover" 
-                        referrerPolicy="no-referrer"
-                        onError={(e) => {
-                          // fallback to styled gradient if image URL breaks
-                          (e.currentTarget as HTMLImageElement).src = "";
-                          (e.currentTarget as HTMLImageElement).parentElement?.classList.add(
-                            'bg-gradient-to-br', 
-                            isExamDoc ? 'from-blue-600' : activeFilter === 'semester1' ? 'from-blue-700' : activeFilter === 'semester2' ? 'from-emerald-600' : 'from-purple-600',
-                            isExamDoc ? 'to-indigo-800' : activeFilter === 'semester1' ? 'to-indigo-900' : activeFilter === 'semester2' ? 'to-teal-800' : 'to-indigo-950'
-                          );
-                        }}
-                      />
-                      <div className={`absolute top-0.5 right-0.5 px-1 py-0.5 rounded text-[6px] font-black uppercase text-white shadow-sm ${
-                        isExamDoc ? 'bg-blue-600' : 'bg-red-600'
+                  {/* Thumbnail Cover + Size in MB below */}
+                  <div className="flex flex-col items-center shrink-0">
+                    {isPlaceholderImage(exam.thumbnail) ? (
+                      <div className={`w-14 h-16 rounded-lg shadow-sm border border-black shrink-0 flex flex-col items-center justify-center text-white relative p-1 text-center ${
+                        isExamDoc
+                          ? 'bg-gradient-to-br from-blue-600 to-indigo-800'
+                          : activeFilter === 'semester1' 
+                          ? 'bg-gradient-to-br from-blue-700 to-indigo-900' 
+                          : activeFilter === 'semester2' 
+                          ? 'bg-gradient-to-br from-emerald-600 to-teal-800' 
+                          : 'bg-gradient-to-br from-purple-600 to-indigo-950'
                       }`}>
-                        {isExamDoc ? 'Word' : 'PDF'}
+                        <FileText className="w-5 h-5 mb-0.5 opacity-90" />
+                        <span className="text-[8px] font-black tracking-widest uppercase">{isExamDoc ? 'WORD' : 'PDF'}</span>
+                        <div className="absolute bottom-1 right-1 left-1 bg-black/20 py-0.5 rounded text-[6px] font-bold overflow-hidden whitespace-nowrap text-ellipsis px-1">
+                          {activeFilter === 'semester1' ? 'فصل1' : activeFilter === 'semester2' ? 'فصل2' : 'شامل'}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="w-14 h-16 rounded-lg border border-black overflow-hidden bg-slate-50 shrink-0 shadow-sm relative">
+                        <img 
+                          src={exam.thumbnail} 
+                          alt={exam.title} 
+                          className="w-full h-full object-cover" 
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            // fallback to styled gradient if image URL breaks
+                            (e.currentTarget as HTMLImageElement).src = "";
+                            (e.currentTarget as HTMLImageElement).parentElement?.classList.add(
+                              'bg-gradient-to-br', 
+                              isExamDoc ? 'from-blue-600' : activeFilter === 'semester1' ? 'from-blue-700' : activeFilter === 'semester2' ? 'from-emerald-600' : 'from-purple-600',
+                              isExamDoc ? 'to-indigo-800' : activeFilter === 'semester1' ? 'to-indigo-900' : activeFilter === 'semester2' ? 'to-teal-800' : 'to-indigo-950'
+                            );
+                          }}
+                        />
+                        <div className={`absolute top-0.5 right-0.5 px-1 py-0.5 rounded text-[6px] font-black uppercase text-white shadow-sm ${
+                          isExamDoc ? 'bg-blue-600' : 'bg-red-600'
+                        }`}>
+                          {isExamDoc ? 'Word' : 'PDF'}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* File Size in MB below the cover icon */}
+                    {displaySize && (
+                      <span className="text-[9px] font-bold text-slate-500 mt-1 tracking-tight text-center whitespace-nowrap select-none" dir="ltr">
+                        {displaySize}
+                      </span>
+                    )}
+                  </div>
 
                   <div className="text-right flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">

@@ -16,7 +16,8 @@ import { ResourceItem, ActiveResourceModalState } from '../types/resources';
 
 // --- Normalization & Validation Utilities ---
 
-export const normalizeArabic = (str: string = ''): string => {
+export const normalizeArabic = (str?: any): string => {
+  if (!str || typeof str !== 'string') return '';
   return str
     .replace(/[أإآ]/g, 'ا')
     .replace(/ة/g, 'ه')
@@ -37,15 +38,16 @@ export const isValidResourceUrl = (url?: any): boolean => {
   return trimmed.startsWith('http://') || trimmed.startsWith('https://');
 };
 
-export const getYouTubeId = (url: string): string | null => {
-  if (!url) return null;
+export const getYouTubeId = (url?: any): string | null => {
+  if (!url || typeof url !== 'string') return null;
   const clean = url.trim();
   const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/)([^"&?\/\s]{11})/i;
   const match = clean.match(regExp);
   return match && match[1] ? match[1] : null;
 };
 
-export const getYouTubeEmbedUrl = (url: string): string => {
+export const getYouTubeEmbedUrl = (url?: any): string => {
+  if (!url || typeof url !== 'string') return '';
   const videoId = getYouTubeId(url);
   if (videoId) {
     return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`;
@@ -343,8 +345,9 @@ export const LessonResourcesRow: React.FC<{
           المصادر:
         </span>
         {validResources.map((res, idx) => {
-          const type = (res.type || '').toLowerCase();
-          const title = res.resourceTitle?.trim() || (
+          const type = (res?.type || '').toLowerCase();
+          const rawTitle = typeof res?.resourceTitle === 'string' ? res.resourceTitle.trim() : '';
+          const title = rawTitle || (
             type === 'video' ? 'شرح فيديو' :
             type === 'pdf' ? 'ملخص PDF' :
             type === 'image' ? 'صورة توضيحية' : 'مورد إضافي'
@@ -398,8 +401,9 @@ export const UnitResourcesRow: React.FC<{
         </span>
         <div className="flex items-center gap-2 flex-wrap">
           {validResources.map((res, idx) => {
-            const type = (res.type || '').toLowerCase();
-            const title = res.resourceTitle?.trim() || (
+            const type = (res?.type || '').toLowerCase();
+            const rawTitle = typeof res?.resourceTitle === 'string' ? res.resourceTitle.trim() : '';
+            const title = rawTitle || (
               type === 'pdf' ? 'ملخص الوحدة (PDF)' :
               type === 'video' ? 'شرح فيديو للوحدة' :
               type === 'image' ? 'مخطط الوحدة' : 'مورد الوحدة'
