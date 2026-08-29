@@ -1,5 +1,8 @@
 {
   "name": "الشامل 12",
   "description": "تطبيق تعليمي لمادة الرياضيات للصف الثاني عشر الأكاديمي مع واجهة حديثة ودعم RTL.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

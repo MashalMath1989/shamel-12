@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronDown, ChevronLeft, ChevronRight, BookOpen, GraduationCap, ArrowRight, ArrowLeft, CheckCircle2, XCircle, Loader2, RefreshCcw, Clock, Lightbulb, X, Printer, FileText, AlertTriangle, Download, FileDown, Star, Share2, Flag, Trash2, Info, LogOut, Mail, Lock, User as UserIcon, LogIn, Menu, Check, History, Settings, Link, ExternalLink, Maximize2, Minimize2, Eye, Moon, Sun, ZoomIn, ZoomOut } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, BookOpen, GraduationCap, ArrowRight, ArrowLeft, CheckCircle2, XCircle, Loader2, RefreshCcw, Clock, Lightbulb, X, Printer, FileText, AlertTriangle, Download, FileDown, Star, Share2, Flag, Trash2, Info, LogOut, Mail, Lock, User as UserIcon, LogIn, Menu, Check, History, Settings, Link, ExternalLink, Maximize2, Minimize2, Eye, Moon, Sun, ZoomIn, ZoomOut, Play } from 'lucide-react';
 import { auth, db, OperationType, handleFirestoreError } from './firebase';
 import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, User as FirebaseUser, GoogleAuthProvider, browserPopupRedirectResolver } from 'firebase/auth';
 import { doc, setDoc, getDoc, collection, query, where, getDocs, onSnapshot, addDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
@@ -10,6 +10,16 @@ import katex from 'katex';
 // @ts-ignore
 import renderMathInElement from 'katex/dist/contrib/auto-render';
 import 'katex/dist/katex.min.css';
+import { FoundationVideosScreen } from './components/FoundationVideosScreen';
+import { 
+  ResourceVideoModal, 
+  ResourceImageModal, 
+  ResourcePdfModal, 
+  useSemesterSources, 
+  LessonResourcesRow, 
+  UnitResourcesRow 
+} from './components/ResourcesViewer';
+import { ResourceItem, ActiveResourceModalState } from './types/resources';
 
 // --- Types ---
 interface Question {
@@ -37,6 +47,7 @@ interface Lesson {
 interface Unit {
   id: number;
   title: string;
+  page?: number;
   lessons: Lesson[];
 }
 
@@ -48,23 +59,30 @@ interface Semester {
 }
 
 const ExamCountdown = () => {
-  const [timeLeft, setTimeLeft] = useState({
-    days: 0,
-    hours: 0,
-    minutes: 0,
-    seconds: 0,
-    isFinished: false
+  const [timeLeft, setTimeLeft] = useState(() => {
+    const targetDate = new Date('2027-07-01T10:00:00').getTime();
+    const now = new Date().getTime();
+    const distance = targetDate - now;
+    if (distance < 0) {
+      return { days: 0, hours: 0, minutes: 0, seconds: 0, isFinished: true };
+    }
+    return {
+      days: Math.floor(distance / (1000 * 60 * 60 * 24)),
+      hours: Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+      minutes: Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60)),
+      seconds: Math.floor((distance % (1000 * 60)) / 1000),
+      isFinished: false
+    };
   });
 
   useEffect(() => {
-    const targetDate = new Date('2026-07-02T10:00:00').getTime();
+    const targetDate = new Date('2027-07-01T10:00:00').getTime();
 
-    const timer = setInterval(() => {
+    const updateTimer = () => {
       const now = new Date().getTime();
       const distance = targetDate - now;
 
       if (distance < 0) {
-        clearInterval(timer);
         setTimeLeft(prev => ({ ...prev, isFinished: true }));
         return;
       }
@@ -76,8 +94,10 @@ const ExamCountdown = () => {
         seconds: Math.floor((distance % (1000 * 60)) / 1000),
         isFinished: false
       });
-    }, 1000);
+    };
 
+    updateTimer();
+    const timer = setInterval(updateTimer, 1000);
     return () => clearInterval(timer);
   }, []);
 
@@ -194,7 +214,7 @@ const AuthScreen: React.FC = () => {
             
               <div className="w-24 h-24 bg-white p-1 rounded-lg shadow-sm border border-black overflow-hidden hover:scale-105 active:scale-95 transition-transform">
                 <img 
-                  src="https://i.postimg.cc/5thfkk0K/1776687090631.png" 
+                  src="https://raw.githubusercontent.com/MashalMath/Pdf_Library/main/Shamel12_Logo_Cover.png" 
                   alt="منصة الشامل" 
                   className="w-full h-full object-cover rounded-lg"
                   referrerPolicy="no-referrer"
@@ -205,7 +225,7 @@ const AuthScreen: React.FC = () => {
             <div className="flex flex-col items-center">
               <h1 className="text-lg font-black text-slate-900 mb-0.5 tracking-tight">في الرياضيات المتقدم</h1>
               <p className="text-slate-500 font-bold text-xs mb-0.5">بنك أسئلة</p>
-              <p className="text-slate-400 font-bold text-[10px]">المسار الأكاديمي . جيل 2008</p>
+              <p className="text-slate-400 font-bold text-[10px]">المسار الأكاديمي . جيل 2009</p>
             </div> 
           
           <form onSubmit={handleEmailAuth} className="space-y-4 max-w-md mx-auto w-full">
@@ -720,6 +740,7 @@ const ACADEMIC_DATA: Semester[] = [
       {
         id: 1,
         title: "الوحدة 1: الاقترانات والمقادير الجبرية",
+        page: 6,
         lessons: [
           { 
             id: 1, 
@@ -738,7 +759,7 @@ const ACADEMIC_DATA: Semester[] = [
           { 
             id: 2, 
             title: "الكسور الجزئية", 
-            page: 23,
+            page: 21,
             exams: {
               1: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit1_L2_exam1.json",
               2: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit1_L2_exam2.json",
@@ -754,11 +775,12 @@ const ACADEMIC_DATA: Semester[] = [
       {
         id: 2,
         title: "الوحدة 2: المتطابقات والمعادلات المثلثية",
+        page: 32,
         lessons: [
           { 
             id: 1, 
             title: "المتطابقات المثلثية 1", 
-            page: 38,
+            page: 34,
             exams: {
               1: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit2_L1_exam1.json",
               2: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit2_L1_exam2.json",
@@ -772,7 +794,7 @@ const ACADEMIC_DATA: Semester[] = [
           { 
             id: 2, 
             title: "المتطابقات المثلثية 2", 
-            page: 50,
+            page: 46,
             exams: {
               1: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit2_L2_exam1.json",
               2: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit2_L2_exam2.json",
@@ -786,7 +808,7 @@ const ACADEMIC_DATA: Semester[] = [
           { 
             id: 3, 
             title: "حل المعادلات المثلثية", 
-            page: 61,
+            page: 57,
             exams: {
               1: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit2_L3_exam1.json",
               2: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit2_L3_exam2.json",
@@ -802,11 +824,12 @@ const ACADEMIC_DATA: Semester[] = [
       {
         id: 3,
         title: "الوحدة 3: التفاضل وتطبيقاته",
+        page: 74,
         lessons: [
           { 
             id: 1, 
             title: "مشتقة اقترانات خاصة", 
-            page: 78,
+            page: 76,
             exams: {
               1: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit3_L1_exam1.json",
               2: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit3_L1_exam2.json",
@@ -820,7 +843,7 @@ const ACADEMIC_DATA: Semester[] = [
           { 
             id: 2, 
             title: "مشتقتا الضرب والقسمة والمشتقات العليا", 
-            page: 93,
+            page: 89,
             exams: {
               1: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit3_L2_exam1.json",
               2: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit3_L2_exam2.json",
@@ -834,7 +857,7 @@ const ACADEMIC_DATA: Semester[] = [
           { 
             id: 3, 
             title: "قاعدة السلسلة", 
-            page: 106,
+            page: 103,
             exams: {
               1: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit3_L3_exam1.json",
               2: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit3_L3_exam2.json",
@@ -848,7 +871,7 @@ const ACADEMIC_DATA: Semester[] = [
           { 
             id: 4, 
             title: "الاشتقاق الضمني", 
-            page: 123,
+            page: 121,
             exams: {
               1: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit3_L4_exam1.json",
               2: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit3_L4_exam2.json",
@@ -862,7 +885,7 @@ const ACADEMIC_DATA: Semester[] = [
           { 
             id: 5, 
             title: "المعدلات المرتبطة", 
-            page: 135,
+            page: 133,
             exams: {
               1: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit3_L5_exam1.json",
               2: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit3_L5_exam2.json",
@@ -878,11 +901,12 @@ const ACADEMIC_DATA: Semester[] = [
       {
         id: 4,
         title: "الوحدة 4: الأعداد المركبة",
+        page: 148,
         lessons: [
           { 
             id: 1, 
             title: "الأعداد المركبة", 
-            page: 152,
+            page: 150,
             exams: {
               1: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit4_L1_exam1.json",
               2: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit4_L1_exam2.json",
@@ -896,7 +920,7 @@ const ACADEMIC_DATA: Semester[] = [
           { 
             id: 2, 
             title: "العمليات على الأعداد المركبة", 
-            page: 167,
+            page: 165,
             exams: {
               1: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit4_L2_exam1.json",
               2: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit4_L2_exam2.json",
@@ -910,7 +934,7 @@ const ACADEMIC_DATA: Semester[] = [
           { 
             id: 3, 
             title: "المحل الهندسي في المستوى المركب", 
-            page: 180,
+            page: 178,
             exams: {
               1: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit4_L3_exam1.json",
               2: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s1_unit4_L3_exam2.json",
@@ -1848,10 +1872,12 @@ const LessonItem = React.memo<{
   semesterId: number;
   unitId: number;
   onSelectTest: (num: number, url?: string, ids?: any) => void;
+  onOpenResource?: (res: ResourceItem) => void;
+  lessonResources?: ResourceItem[];
   initialIsExpanded?: boolean;
   fullMarkExams: string[];
   examProgress: Record<string, any>;
-}>(({ lesson, semesterId, unitId, onSelectTest, initialIsExpanded = false, fullMarkExams = [], examProgress = {} }) => {
+}>(({ lesson, semesterId, unitId, onSelectTest, onOpenResource, lessonResources = [], initialIsExpanded = false, fullMarkExams = [], examProgress = {} }) => {
   const [isExpanded, setIsExpanded] = useState(initialIsExpanded);
   
   const isCompleted = React.useMemo(() => {
@@ -1914,14 +1940,23 @@ const LessonItem = React.memo<{
 
         <AnimatePresence>
           {isExpanded && (
-            <TestGrid 
-              lesson={lesson} 
-              semesterId={semesterId}
-              unitId={unitId}
-              onSelectTest={(num, url) => onSelectTest(num, url, { lessonId: lesson.id })} 
-              examProgress={examProgress}
-              fullMarkExams={fullMarkExams}
-            />
+            <>
+              <TestGrid 
+                lesson={lesson} 
+                semesterId={semesterId}
+                unitId={unitId}
+                onSelectTest={(num, url) => onSelectTest(num, url, { lessonId: lesson.id })} 
+                examProgress={examProgress}
+                fullMarkExams={fullMarkExams}
+              />
+              {lessonResources && lessonResources.length > 0 && onOpenResource && (
+                <LessonResourcesRow 
+                  lessonTitle={lesson.title} 
+                  resources={lessonResources} 
+                  onOpenResource={onOpenResource} 
+                />
+              )}
+            </>
           )}
         </AnimatePresence>
       </div>
@@ -1933,12 +1968,15 @@ const UnitItem = React.memo<{
   unit: Unit; 
   semesterId: number;
   onSelectTest: (num: number, url?: string, ids?: any) => void;
+  onOpenResource?: (res: ResourceItem) => void;
   initialIsExpanded?: boolean;
   initialExpandedLessonId?: number;
   fullMarkExams: string[];
   examProgress: Record<string, any>;
-}>(({ unit, semesterId, onSelectTest, initialIsExpanded = false, initialExpandedLessonId, fullMarkExams = [], examProgress = {} }) => {
+}>(({ unit, semesterId, onSelectTest, onOpenResource, initialIsExpanded = false, initialExpandedLessonId, fullMarkExams = [], examProgress = {} }) => {
   const [isExpanded, setIsExpanded] = useState(initialIsExpanded);
+  const { getUnitResources, getLessonResources } = useSemesterSources(semesterId);
+  const unitResources = getUnitResources(unit.id, unit.title);
 
   useEffect(() => {
     if (initialIsExpanded) setIsExpanded(true);
@@ -2007,11 +2045,20 @@ const UnitItem = React.memo<{
                   semesterId={semesterId}
                   unitId={unit.id}
                   onSelectTest={(num, url, ids) => onSelectTest(num, url, { ...ids, unitId: unit.id })} 
+                  onOpenResource={onOpenResource}
+                  lessonResources={getLessonResources(unit.id, lesson.id, lesson.title, unit.title)}
                   initialIsExpanded={initialExpandedLessonId === lesson.id}
                   fullMarkExams={fullMarkExams}
                   examProgress={examProgress}
                 />
               ))}
+              {unitResources.length > 0 && onOpenResource && (
+                <UnitResourcesRow
+                  unitTitle={unit.title}
+                  resources={unitResources}
+                  onOpenResource={onOpenResource}
+                />
+              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -2024,6 +2071,8 @@ interface SemesterCardProps {
   semester: Semester; 
   onSelectTest: (num: number, url?: string, ids?: any) => void;
   onOpenFavorites: (ids: number[], title: string) => void;
+  onOpenFoundation?: () => void;
+  onOpenResource?: (res: ResourceItem) => void;
   initialIsExpanded?: boolean;
   initialExpandedUnitId?: number;
   initialExpandedLessonId?: number;
@@ -2031,7 +2080,7 @@ interface SemesterCardProps {
   examProgress: Record<string, any>;
 }
 
-const SemesterCard = React.memo<SemesterCardProps>(({ semester, onSelectTest, onOpenFavorites, initialIsExpanded = false, initialExpandedUnitId, initialExpandedLessonId, fullMarkExams = [], examProgress = {} }) => {
+const SemesterCard = React.memo<SemesterCardProps>(({ semester, onSelectTest, onOpenFavorites, onOpenFoundation, onOpenResource, initialIsExpanded = false, initialExpandedUnitId, initialExpandedLessonId, fullMarkExams = [], examProgress = {} }) => {
   const [isExpanded, setIsExpanded] = useState(initialIsExpanded);
   const [hasFavorites, setHasFavorites] = useState(false);
   const user = auth.currentUser;
@@ -2095,6 +2144,22 @@ const SemesterCard = React.memo<SemesterCardProps>(({ semester, onSelectTest, on
         <Star className={`w-4 h-4 ${hasFavorites ? 'fill-orange-500 text-orange-500' : ''}`} />
       </button>
 
+      {/* Foundation Lessons Badge Button (Semester 1 only) */}
+      {semester.id === 1 && onOpenFoundation && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenFoundation();
+          }}
+          className="absolute top-1 left-1/2 -translate-x-1/2 z-10 h-6 px-2.5 rounded-md flex items-center gap-1.5 bg-gradient-to-r from-rose-600 to-red-600 text-white text-[11px] font-black shadow-xs hover:from-rose-700 hover:to-red-700 active:scale-95 transition-all border border-black font-mohand cursor-pointer group"
+          title="حصص التأسيس"
+        >
+          <Play className="w-2.5 h-2.5 fill-white text-white shrink-0 group-hover:scale-110 transition-transform" />
+          <span className="whitespace-nowrap">حصص التأسيس</span>
+        </button>
+      )}
+
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full flex items-center justify-between p-4 text-right bg-white hover:bg-[#fcfaf7] transition-colors"
@@ -2153,6 +2218,7 @@ const SemesterCard = React.memo<SemesterCardProps>(({ semester, onSelectTest, on
                   unit={unit} 
                   semesterId={semester.id}
                   onSelectTest={(num, url, ids) => onSelectTest(num, url, { ...ids, semesterId: semester.id })} 
+                  onOpenResource={onOpenResource}
                   initialIsExpanded={initialExpandedUnitId === unit.id}
                   initialExpandedLessonId={initialExpandedUnitId === unit.id ? initialExpandedLessonId : undefined}
                   fullMarkExams={fullMarkExams}
@@ -2810,7 +2876,7 @@ const LibraryScreen: React.FC<{
       {
         semester: "الفصل الأول",
         title: "امتحان تجريبي شامل - الفصل الدراسي الأول",
-        thumbnail: "https://i.postimg.cc/wxsPYr2K/IMG-20260424-175208-912.png",
+        thumbnail: "https://raw.githubusercontent.com/MashalMath/Pdf_Library/main/Shamel12_Library_Cover.jpg",
         pdfUrl: "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/PDFs/S1_Exam_2026.pdf"
       },
       {
@@ -3200,6 +3266,134 @@ const LibraryScreen: React.FC<{
   );
 };
 
+// Robust PDF DOM Sanitizer that completely strips any unsupported oklch color references
+const sanitizeDocumentForPDF = (clonedDoc: Document) => {
+  try {
+    // 1. Sanitize all <style> elements in clonedDoc (prevents html2canvas from crashing on modern oklch/color)
+    const styleTags = clonedDoc.querySelectorAll('style');
+    styleTags.forEach((s) => {
+      try {
+        let content = s.textContent || s.innerHTML || '';
+        if (content.includes('oklch') || content.includes('color(')) {
+          content = content
+            .replace(/oklch\([^)]*\)/gi, '#1e293b')
+            .replace(/color\(srgb[^)]*\)/gi, '#1e293b')
+            .replace(/color\([^)]*\)/gi, '#1e293b');
+          s.textContent = content;
+        }
+      } catch (err) {
+        console.warn('Error sanitizing style element:', err);
+      }
+    });
+
+    // 2. Adjust target printable container
+    const element = (clonedDoc.querySelector('[data-pdf-content="true"]') as HTMLElement) || clonedDoc.body;
+    if (element) {
+      element.style.width = '210mm';
+      element.style.margin = '0 auto';
+      element.style.padding = '8mm';
+      element.style.backgroundColor = '#ffffff';
+    }
+
+    // 3. Helper iteration for all DOM elements to remove any computed or inline oklch/color
+    const allElements = clonedDoc.querySelectorAll('*');
+    allElements.forEach((el: any) => {
+      try {
+        el.style.boxSizing = 'border-box';
+
+        // Sanitize inline style attribute string
+        const inlineStyle = el.getAttribute('style');
+        if (inlineStyle && (inlineStyle.includes('oklch') || inlineStyle.includes('color('))) {
+          el.setAttribute(
+            'style',
+            inlineStyle
+              .replace(/oklch\([^)]*\)/gi, '#1e293b')
+              .replace(/color\(srgb[^)]*\)/gi, '#1e293b')
+              .replace(/color\([^)]*\)/gi, '#1e293b')
+          );
+        }
+
+        const computed = window.getComputedStyle(el);
+        const colorProps = [
+          'color',
+          'backgroundColor',
+          'borderColor',
+          'borderTopColor',
+          'borderRightColor',
+          'borderBottomColor',
+          'borderLeftColor',
+          'outlineColor',
+          'textDecorationColor',
+          'fill',
+          'stroke'
+        ];
+
+        colorProps.forEach((prop) => {
+          const val = (computed as any)[prop];
+          if (val && typeof val === 'string' && (val.includes('oklch') || val.includes('color('))) {
+            if (prop === 'backgroundColor') {
+              el.style[prop] = '#ffffff';
+            } else if (prop.toLowerCase().includes('border')) {
+              el.style[prop] = '#e2e8f0';
+            } else {
+              el.style[prop] = '#1e293b';
+            }
+          }
+        });
+
+        if (el.style && el.style.boxShadow && (el.style.boxShadow.includes('oklch') || el.style.boxShadow.includes('color('))) {
+          el.style.boxShadow = 'none';
+        }
+      } catch (err) {
+        // ignore element error
+      }
+    });
+
+    // 4. Inject strict, clean CSS for Math, Watermark and PDF structure
+    const styleTag = clonedDoc.createElement('style');
+    styleTag.innerHTML = `
+      @font-face { font-family: 'Inter'; font-weight: 400; font-style: normal; }
+      body { font-family: 'Inter', sans-serif !important; background: #ffffff !important; margin: 0 !important; color: #1e293b !important; }
+      
+      /* KaTeX / Math Rendering Fixes */
+      .katex { font-size: 0.95em !important; line-height: 1.5 !important; color: #1e293b !important; }
+      .katex * { border-color: currentColor !important; text-decoration: none !important; color: inherit !important; }
+      .katex .frac-line { 
+        border-bottom-width: 0.8pt !important; 
+        min-height: 0.8pt !important; 
+        margin: 1.2pt 0 3.2pt 0 !important;
+        border-color: currentColor !important;
+        display: block !important;
+        opacity: 1 !important;
+      }
+      .katex .mfrac > span > span { 
+        padding: 4pt 0 !important; 
+        line-height: 1.4 !important;
+      }
+      .katex .vlist-t { 
+        border-collapse: separate !important; 
+        border-spacing: 0 4pt !important; 
+      }
+      .katex .vlist-r { padding: 2pt 0 !important; }
+      .katex .mfrac { 
+        margin: 0.4em 0 !important; 
+        line-height: 1.5 !important; 
+        vertical-align: middle !important; 
+        display: inline-block !important;
+      }
+      
+      .math-text-container { padding: 4pt 0 !important; line-height: 1.6 !important; }
+      * { box-sizing: border-box !important; }
+      .question-container { break-inside: avoid !important; page-break-inside: avoid !important; }
+      .option-row { break-inside: avoid !important; page-break-inside: avoid !important; min-height: 20px !important; margin-bottom: 2px !important; padding: 1px 0 !important; }
+      .pdf-watermark-overlay { position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important; pointer-events: none !important; z-index: 40 !important; overflow: hidden !important; }
+    `;
+    clonedDoc.head.appendChild(styleTag);
+  } catch (globalErr) {
+    console.error('Error in sanitizeDocumentForPDF:', globalErr);
+  }
+};
+
 const AdvancedExamScreen: React.FC<{ 
   examId: number; 
   isRandom: boolean; 
@@ -3347,75 +3541,7 @@ const AdvancedExamScreen: React.FC<{
             allowTaint: true,
             imageTimeout: 20000,
             backgroundColor: '#ffffff',
-            // Pre-process cloned document for professional layout according to strict 2x2 grid requirement
-            onclone: (clonedDoc: Document) => {
-              const element = clonedDoc.querySelector('[data-pdf-content="true"]') as HTMLElement || clonedDoc.body;
-              if (element) {
-                element.style.width = '210mm';
-                element.style.margin = '0 auto';
-                element.style.padding = '8mm'; // Margins to avoid overlap
-                element.style.backgroundColor = '#ffffff';
-              }
-              
-              // Helper iteration for global styling
-              const allElements = clonedDoc.querySelectorAll('*');
-              allElements.forEach((el: any) => {
-                el.style.boxSizing = 'border-box';
-                const style = window.getComputedStyle(el);
-                if (style.color && (style.color.includes('oklch') || style.color === 'rgba(0, 0, 0, 0)')) {
-                  el.style.color = '#1e293b'; 
-                }
-                if (style.backgroundColor && style.backgroundColor.includes('oklch')) {
-                  el.style.backgroundColor = 'transparent';
-                }
-                if (style.borderColor && (style.borderColor.includes('oklch') || style.borderColor === 'rgba(0, 0, 0, 0)')) {
-                  el.style.borderColor = '#e2e8f0';
-                }
-              });
-
-              // Inject strict CSS for math spacing and containment
-              const styleTag = clonedDoc.createElement('style');
-              styleTag.innerHTML = `
-                @font-face { font-family: 'Inter'; font-weight: 400; font-style: normal; }
-                body { font-family: 'Inter', sans-serif !important; background: white !important; margin: 0 !important; }
-                
-                /* 3. LaTeX Fix */
-                .katex { font-size: 0.95em !important; line-height: 1.5 !important; }
-                .katex * { border-color: currentColor !important; text-decoration: none !important; }
-                .katex .frac-line { 
-                  border-bottom-width: 0.8pt !important; 
-                  min-height: 0.8pt !important; 
-                  margin: 1.2pt 0 3.2pt 0 !important;
-                  border-color: currentColor !important;
-                  display: block !important;
-                  opacity: 1 !important;
-                }
-                .katex .mfrac > span > span { 
-                  padding: 4pt 0 !important; 
-                  line-height: 1.4 !important;
-                }
-                .katex .vlist-t { 
-                  border-collapse: separate !important; 
-                  border-spacing: 0 4pt !important; 
-                }
-                .katex .vlist-r { padding: 2pt 0 !important; }
-                .katex .mfrac { 
-                  margin: 0.4em 0 !important; 
-                  line-height: 1.5 !important; 
-                  vertical-align: middle !important; 
-                  display: inline-block !important;
-                }
-                
-                /* Add padding-top and padding-bottom for components containing math */
-                .math-text-container { padding: 4pt 0 !important; line-height: 1.6 !important; }
-                
-                /* 4. Ensure elements obey border-box for strict containment to avoid splitting */
-                * { box-sizing: border-box !important; }
-                .question-container { break-inside: avoid !important; page-break-inside: avoid !important; }
-                .option-row { break-inside: avoid !important; page-break-inside: avoid !important; min-height: 20px !important; margin-bottom: 2px !important; padding: 1px 0 !important; }
-              `;
-              clonedDoc.head.appendChild(styleTag);
-            }
+            onclone: sanitizeDocumentForPDF
           },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true, precision: 16 },
           pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
@@ -4118,18 +4244,64 @@ const AdvancedExamScreen: React.FC<{
             {Array.from({ length: Math.ceil(questions.length / 4) }).map((_, pageIdx) => {
               const pageQuestions = questions.slice(pageIdx * 4, pageIdx * 4 + 4);
               return (
-                <div key={pageIdx} className="pdf-page flex flex-col" style={{ 
+                <div key={pageIdx} className="pdf-page relative flex flex-col" style={{ 
                   width: '210mm', 
                   height: '296mm', 
                   padding: '10mm', 
                   pageBreakAfter: pageIdx < Math.ceil(questions.length / 4) - 1 ? 'always' : 'auto',
                   boxSizing: 'border-box',
-                  overflow: 'hidden'
+                  overflow: 'hidden',
+                  position: 'relative'
                 }}>
+                  {/* Continuous Diagonal Vector Watermark Overlay */}
+                  <div 
+                    className="pdf-watermark-overlay"
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '210mm',
+                      height: '296mm',
+                      pointerEvents: 'none',
+                      zIndex: 40,
+                      overflow: 'hidden'
+                    }}
+                    aria-hidden="true"
+                  >
+                    <svg
+                      viewBox="0 0 794 1123"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        display: 'block'
+                      }}
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <text
+                        x="397"
+                        y="561.5"
+                        textAnchor="middle"
+                        dominantBaseline="central"
+                        transform="rotate(-42 397 561.5)"
+                        style={{
+                          fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+                          fontSize: '130px',
+                          fontWeight: 900,
+                          fill: '#1e293b',
+                          fillOpacity: 0.08,
+                          letterSpacing: '6px',
+                          userSelect: 'none'
+                        }}
+                      >
+                        Shamel12
+                      </text>
+                    </svg>
+                  </div>
+
                   {pageIdx === 0 && (
                     <div className="pb-3 mb-5 text-center shrink-0" style={{ borderBottom: '2px solid #2563eb' }}>
                       <h1 className="text-xl font-black mb-1" style={{ color: '#0f172a' }}>{isRandom ? 'نموذج وزاري عشوائي' : examId === 17 ? 'نموذج 17 (فصل ثاني)' : examId === 16 ? `نموذج التفاضل رقم ${examId}` : examId === 15 ? `النموذج الوزاري رقم ${examId}` : examId === 14 ? `نموذج المتجهات رقم ${examId}` : examId === 13 ? `النموذج التجريبي رقم ${examId}` : `النموذج الوزاري رقم ${examId}`}</h1>
-                      <p className="font-bold mt-2 text-[11px]" style={{ color: '#94a3b8' }}>منصة الشامل في الرياضيات - جيل 2008</p>
+                      <p className="font-bold mt-2 text-[11px]" style={{ color: '#94a3b8' }}>منصة الشامل في الرياضيات - جيل 2009</p>
                     </div>
                   )}
 
@@ -4659,74 +4831,7 @@ const ExamScreen: React.FC<{
             allowTaint: true,
             imageTimeout: 20000,
             backgroundColor: '#ffffff',
-            onclone: (clonedDoc: Document) => {
-              const element = clonedDoc.querySelector('[data-pdf-content="true"]') as HTMLElement || clonedDoc.body;
-              if (element) {
-                element.style.width = '210mm';
-                element.style.margin = '0 auto';
-                element.style.padding = '8mm'; // Margins to avoid overlap
-                element.style.backgroundColor = '#ffffff';
-              }
-              
-              // Helper iteration for global styling
-              const allElements = clonedDoc.querySelectorAll('*');
-              allElements.forEach((el: any) => {
-                el.style.boxSizing = 'border-box';
-                const style = window.getComputedStyle(el);
-                if (style.color && (style.color.includes('oklch') || style.color === 'rgba(0, 0, 0, 0)')) {
-                  el.style.color = '#1e293b'; 
-                }
-                if (style.backgroundColor && style.backgroundColor.includes('oklch')) {
-                  el.style.backgroundColor = 'transparent';
-                }
-                if (style.borderColor && (style.borderColor.includes('oklch') || style.borderColor === 'rgba(0, 0, 0, 0)')) {
-                  el.style.borderColor = '#e2e8f0';
-                }
-              });
-
-              // Inject strict CSS for math spacing and containment
-              const styleTag = clonedDoc.createElement('style');
-              styleTag.innerHTML = `
-                @font-face { font-family: 'Inter'; font-weight: 400; font-style: normal; }
-                body { font-family: 'Inter', sans-serif !important; background: white !important; margin: 0 !important; }
-                
-                /* 3. LaTeX Fix */
-                .katex { font-size: 0.95em !important; line-height: 1.5 !important; }
-                .katex * { border-color: currentColor !important; text-decoration: none !important; }
-                .katex .frac-line { 
-                  border-bottom-width: 0.8pt !important; 
-                  min-height: 0.8pt !important; 
-                  margin: 1.2pt 0 3.2pt 0 !important;
-                  border-color: currentColor !important;
-                  display: block !important;
-                  opacity: 1 !important;
-                }
-                .katex .mfrac > span > span { 
-                  padding: 4pt 0 !important; 
-                  line-height: 1.4 !important;
-                }
-                .katex .vlist-t { 
-                  border-collapse: separate !important; 
-                  border-spacing: 0 4pt !important; 
-                }
-                .katex .vlist-r { padding: 2pt 0 !important; }
-                .katex .mfrac { 
-                  margin: 0.4em 0 !important; 
-                  line-height: 1.5 !important; 
-                  vertical-align: middle !important; 
-                  display: inline-block !important;
-                }
-                
-                /* Add padding-top and padding-bottom for components containing math */
-                .math-text-container { padding: 4pt 0 !important; line-height: 1.6 !important; }
-                
-                /* 4. Ensure elements obey border-box for strict containment to avoid splitting */
-                * { box-sizing: border-box !important; }
-                .question-container { break-inside: avoid !important; page-break-inside: avoid !important; }
-                .option-row { break-inside: avoid !important; page-break-inside: avoid !important; min-height: 20px !important; margin-bottom: 2px !important; padding: 1px 0 !important; }
-              `;
-              clonedDoc.head.appendChild(styleTag);
-            }
+            onclone: sanitizeDocumentForPDF
           },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true, precision: 16 },
           pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
@@ -5512,14 +5617,60 @@ const ExamScreen: React.FC<{
             {Array.from({ length: Math.ceil((examData?.questions.length || 0) / 4) }).map((_, pageIdx) => {
               const pageQuestions = examData?.questions.slice(pageIdx * 4, pageIdx * 4 + 4) || [];
               return (
-                <div key={pageIdx} className="pdf-page flex flex-col" style={{ 
+                <div key={pageIdx} className="pdf-page relative flex flex-col" style={{ 
                   width: '210mm', 
                   height: '296mm', 
                   padding: '10mm', 
                   pageBreakAfter: pageIdx < Math.ceil((examData?.questions.length || 0) / 4) - 1 ? 'always' : 'auto',
                   boxSizing: 'border-box',
-                  overflow: 'hidden'
+                  overflow: 'hidden',
+                  position: 'relative'
                 }}>
+                  {/* Continuous Diagonal Vector Watermark Overlay */}
+                  <div 
+                    className="pdf-watermark-overlay"
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '210mm',
+                      height: '296mm',
+                      pointerEvents: 'none',
+                      zIndex: 40,
+                      overflow: 'hidden'
+                    }}
+                    aria-hidden="true"
+                  >
+                    <svg
+                      viewBox="0 0 794 1123"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        display: 'block'
+                      }}
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <text
+                        x="397"
+                        y="561.5"
+                        textAnchor="middle"
+                        dominantBaseline="central"
+                        transform="rotate(-42 397 561.5)"
+                        style={{
+                          fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+                          fontSize: '130px',
+                          fontWeight: 900,
+                          fill: '#1e293b',
+                          fillOpacity: 0.08,
+                          letterSpacing: '6px',
+                          userSelect: 'none'
+                        }}
+                      >
+                        Shamel12
+                      </text>
+                    </svg>
+                  </div>
+
                   {pageIdx === 0 && (
                     <div className="pb-3 mb-5 text-center shrink-0" style={{ borderBottom: '2px solid #2563eb' }}>
                       <h1 className="text-xl font-black mb-1" style={{ color: '#0f172a' }}>{examData?.title}</h1>
@@ -5547,7 +5698,7 @@ const ExamScreen: React.FC<{
                         )}
                       </div>
                       
-                      <p className="font-bold mt-2 text-[11px]" style={{ color: '#94a3b8' }}>منصة الشامل في الرياضيات - جيل 2008</p>
+                      <p className="font-bold mt-2 text-[11px]" style={{ color: '#94a3b8' }}>منصة الشامل في الرياضيات - جيل 2009</p>
                     </div>
                   )}
 
@@ -5674,7 +5825,7 @@ const AboutModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen
             <div className="p-8 pt-10 text-center">
               <div className="w-24 h-24 bg-white rounded-xl flex items-center justify-center mx-auto mb-6 shadow-sm border border-black overflow-hidden">
                 <img 
-                  src="https://i.postimg.cc/5thfkk0K/1776687090631.png" 
+                  src="https://raw.githubusercontent.com/MashalMath/Pdf_Library/main/Shamel12_Logo_Cover.png" 
                   alt="الشامل في الرياضيات المتقدم" 
                   className="w-full h-full object-contain"
                   referrerPolicy="no-referrer"
@@ -5685,7 +5836,7 @@ const AboutModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen
               
               <div className="space-y-4 text-slate-600 font-bold leading-relaxed text-sm md:text-base">
                 <p>
-                  هذا التطبيق هو <span className="text-blue-600 font-black">بنك أسئلة احترافي</span> شامل لمادة الرياضيات للصف الثاني عشر الأكاديمي (جيل 2008).
+                  هذا التطبيق هو <span className="text-blue-600 font-black">بنك أسئلة احترافي</span> شامل لمادة الرياضيات للصف الثاني عشر الأكاديمي (جيل 2009).
                 </p>
                 <p>
                   يحتوي التطبيق على أكثر من <span className="text-green-600 font-black">{totalQuestions}+ سؤال</span> متميزة تغطي <span className="text-blue-600 font-black">الفصلين الأول والثاني</span> وموزعة على كافة وحدات المنهاج.
@@ -5887,6 +6038,10 @@ export default function App() {
   const [showLibrary, setShowLibrary] = useState(() => {
     return localStorage.getItem('showLibrary') === 'true';
   });
+  const [showFoundationVideos, setShowFoundationVideos] = useState(() => {
+    return localStorage.getItem('showFoundationVideos') === 'true';
+  });
+  const [activeResource, setActiveResource] = useState<ActiveResourceModalState | null>(null);
   const [showExamScheduleImage, setShowExamScheduleImage] = useState(() => {
     return localStorage.getItem('showExamScheduleImage') === 'true';
   });
@@ -5915,6 +6070,8 @@ export default function App() {
     setShowFavorites(null);
     setShowExamScheduleImage(false);
     setShowLibrary(false);
+    setShowFoundationVideos(false);
+    setActiveResource(null);
     setBackRequested(0);
     localStorage.removeItem('activeTest');
     localStorage.removeItem('activeAdvExam');
@@ -5922,6 +6079,7 @@ export default function App() {
     localStorage.removeItem('showFavorites');
     localStorage.removeItem('showExamScheduleImage');
     localStorage.removeItem('showLibrary');
+    localStorage.removeItem('showFoundationVideos');
     localStorage.removeItem('examProgress'); 
   };
 
@@ -5944,6 +6102,7 @@ export default function App() {
     else if (selectedAdvExam) currentScreen = 'adv-exam';
     else if (showMinistryModels) currentScreen = 'models';
     else if (showLibrary) currentScreen = 'library';
+    else if (showFoundationVideos) currentScreen = 'foundation';
 
     // If history state doesn't match current state, push a new state
     const historyState = window.history.state;
@@ -5955,9 +6114,15 @@ export default function App() {
       const state = event.state;
       const targetScreen = state?.screen || 'home';
 
+      // If a resource modal is open, close it first
+      if (activeResource) {
+        setActiveResource(null);
+        return;
+      }
+
       // Intercept exit from exam with higher priority
       const isInExam = selectedTest || selectedAdvExam;
-      if (isInExam && (targetScreen === 'home' || targetScreen === 'models' || targetScreen === 'favorites' || targetScreen === 'library')) {
+      if (isInExam && (targetScreen === 'home' || targetScreen === 'models' || targetScreen === 'favorites' || targetScreen === 'library' || targetScreen === 'foundation')) {
         window.history.pushState({ screen: selectedTest ? 'exam' : 'adv-exam' }, '');
         setBackRequested(prev => prev + 1);
         return;
@@ -5980,12 +6145,15 @@ export default function App() {
         setShowExamScheduleImage(false);
         setShowAbout(false);
         setShowLibrary(false);
+        setShowFoundationVideos(false);
+        setActiveResource(null);
         localStorage.removeItem('activeTest');
         localStorage.removeItem('activeAdvExam');
         localStorage.removeItem('showMinistryModels');
         localStorage.removeItem('showFavorites');
         localStorage.removeItem('showExamScheduleImage');
         localStorage.removeItem('showLibrary');
+        localStorage.removeItem('showFoundationVideos');
       } else if (targetScreen === 'models') {
         setShowMinistryModels(true);
         localStorage.setItem('showMinistryModels', 'true');
@@ -5999,6 +6167,8 @@ export default function App() {
         localStorage.removeItem('showExamScheduleImage');
         setShowLibrary(false);
         localStorage.removeItem('showLibrary');
+        setShowFoundationVideos(false);
+        localStorage.removeItem('showFoundationVideos');
       } else if (targetScreen === 'library') {
         setShowLibrary(true);
         localStorage.setItem('showLibrary', 'true');
@@ -6012,12 +6182,29 @@ export default function App() {
         localStorage.removeItem('showFavorites');
         setShowExamScheduleImage(false);
         localStorage.removeItem('showExamScheduleImage');
+        setShowFoundationVideos(false);
+        localStorage.removeItem('showFoundationVideos');
+      } else if (targetScreen === 'foundation') {
+        setShowFoundationVideos(true);
+        localStorage.setItem('showFoundationVideos', 'true');
+        setSelectedTest(null);
+        localStorage.removeItem('activeTest');
+        setSelectedAdvExam(null);
+        localStorage.removeItem('activeAdvExam');
+        setShowMinistryModels(false);
+        localStorage.removeItem('showMinistryModels');
+        setShowFavorites(null);
+        localStorage.removeItem('showFavorites');
+        setShowExamScheduleImage(false);
+        localStorage.removeItem('showExamScheduleImage');
+        setShowLibrary(false);
+        localStorage.removeItem('showLibrary');
       }
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [selectedTest, selectedAdvExam, showMinistryModels, showFavorites, showExitConfirm, showExamScheduleImage, showLibrary]);
+  }, [selectedTest, selectedAdvExam, showMinistryModels, showFavorites, showExitConfirm, showExamScheduleImage, showLibrary, showFoundationVideos, activeResource]);
 
   const handleSelectAdvExam = (id: number, isRandom: boolean = false) => {
     setSelectedTest(null);
@@ -6067,6 +6254,14 @@ export default function App() {
       localStorage.removeItem('showLibrary');
     }
   }, [showLibrary]);
+
+  useEffect(() => {
+    if (showFoundationVideos) {
+      localStorage.setItem('showFoundationVideos', 'true');
+    } else {
+      localStorage.removeItem('showFoundationVideos');
+    }
+  }, [showFoundationVideos]);
 
   useEffect(() => {
     if (showFavorites) {
@@ -6130,6 +6325,17 @@ export default function App() {
             updateExamProgress={updateExamProgress}
             clearExamProgress={clearExamProgress}
             onSaveFullMark={saveFullMark}
+          />
+        ) : showFoundationVideos ? (
+          <FoundationVideosScreen 
+            key="foundation-videos"
+            onBack={() => {
+              setShowFoundationVideos(false);
+              localStorage.removeItem('showFoundationVideos');
+              if (window.history.state?.screen === 'foundation') {
+                window.history.back();
+              }
+            }}
           />
         ) : showMinistryModels ? (
           <MinistryModelsScreen 
@@ -6223,13 +6429,42 @@ export default function App() {
               </div>
             </div>
 
+            {/* Math Basics Button (Directly above Expected Models Card with clean spacing) */}
+            <div className="absolute top-[158px] right-4 z-30">
+              <button
+                type="button"
+                id="foundation-booklet-btn"
+                onClick={() => {
+                  setActiveResource({
+                    type: 'pdf',
+                    url: 'https://raw.githubusercontent.com/MashalMath/Pdf_Library/main/MathBasics_Book.pdf',
+                    title: 'أساسيات الرياضيات'
+                  });
+                }}
+                className="flex flex-col items-center justify-center p-1 bg-white hover:bg-emerald-50 active:scale-95 border border-black rounded-lg shadow-2xs hover:shadow transition-all group cursor-pointer"
+                title="عرض وتحميل أساسيات الرياضيات"
+              >
+                <div className="w-6 h-6 bg-emerald-50 rounded-md border border-emerald-600/30 overflow-hidden flex items-center justify-center mb-0.5 group-hover:scale-105 transition-all shadow-2xs">
+                  <img 
+                    src="https://raw.githubusercontent.com/MashalMath/Pdf_Library/main/Math12%20Photo.jpg" 
+                    alt="أساسيات الرياضيات" 
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+                <span className="text-[8.5px] font-black text-slate-800 tracking-tight leading-tight whitespace-nowrap px-0.5">
+                  أساسيات الرياضيات
+                </span>
+              </button>
+            </div>
+
             <header className="mb-4 mt-1 flex flex-col items-center text-center">
               <p className="text-slate-400 font-bold text-[10px] mb-1" style={{ fontFamily: "'Amiri', serif" }}>بِسْمِ اللَّـهِ الرَّحْمَـٰنِ الرَّحِيمِ</p>
 
               <div className="relative mb-2 cursor-pointer group" onClick={() => setShowAbout(true)}>
                 <div className="w-24 h-24 bg-white p-1 rounded-lg shadow-sm border border-black overflow-hidden hover:scale-105 active:scale-95 transition-transform">
                   <img 
-                    src="https://i.postimg.cc/5thfkk0K/1776687090631.png" 
+                    src="https://raw.githubusercontent.com/MashalMath/Pdf_Library/main/Shamel12_Logo_Cover.png" 
                     alt="Logo" 
                     className="w-full h-full object-cover rounded-lg"
                     referrerPolicy="no-referrer"
@@ -6240,7 +6475,7 @@ export default function App() {
               <div className="flex flex-col items-center">
                 <h1 className="text-lg font-black text-slate-900 mb-0.5 tracking-tight">في الرياضيات المتقدم</h1>
                 <p className="text-slate-500 font-bold text-[10px] mb-0.5">بنك أسئلة</p>
-                <p className="text-slate-400 font-bold text-[9px]">المسار الأكاديمي . جيل 2008</p>
+                <p className="text-slate-400 font-bold text-[9px]">المسار الأكاديمي . جيل 2009</p>
               </div>
             </header>
 
@@ -6251,8 +6486,13 @@ export default function App() {
                   onClick={() => setShowMinistryModels(true)}
                   className="bg-white p-4 rounded-lg shadow-sm border border-black flex flex-col items-center justify-center text-center hover:shadow-md transition-all group min-h-[100px] cursor-pointer"
                 >
-                  <div className="w-10 h-10 bg-transparent rounded-lg border border-black flex items-center justify-center mb-2 group-hover:scale-110 transition-transform overflow-hidden">
-                    <img src="https://i.postimg.cc/wxsPYr2K/IMG-20260424-175208-912.png" alt="نماذج وزارة متوقعة" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                  <div className="w-12 h-12 bg-white rounded-lg border border-black flex items-center justify-center mb-2 group-hover:scale-105 transition-transform overflow-hidden shadow-2xs p-1">
+                    <img 
+                      src="https://raw.githubusercontent.com/MashalMath/Pdf_Library/main/Ministry_Logo.jpg" 
+                      alt="نماذج وزارة متوقعة" 
+                      className="w-full h-full object-contain" 
+                      referrerPolicy="no-referrer" 
+                    />
                   </div>
                   <div className="text-[12px] font-black text-slate-800 leading-[1.2]">
                     <div>نماذج وزارة متوقعة</div>
@@ -6262,11 +6502,11 @@ export default function App() {
                 {/* Exam Date Label */}
                 <div 
                   onClick={() => setShowExamScheduleImage(true)}
-                  className="bg-yellow-400 text-yellow-950 p-4 rounded-lg shadow-md border border-black animate-pulse-slow flex flex-col items-center justify-center text-center min-h-[100px] cursor-pointer hover:shadow-lg transition-all"
+                  className="bg-yellow-400 text-yellow-950 p-4 rounded-lg shadow-sm border border-black flex flex-col items-center justify-center text-center min-h-[100px] cursor-pointer hover:shadow-md transition-all"
                 >
                   <span className="text-[10px] font-bold uppercase tracking-widest opacity-70 mb-1">موعد امتحان الوزارة</span>
-                  <span className="text-[12px] font-black leading-tight">الخميس 02-07-2026</span>
-                  <div className="scale-90 origin-center -mt-1">
+                  <span className="text-[12px] font-black leading-tight">الخميس 01-07-2027</span>
+                  <div className="scale-90 origin-center -mt-1 w-full">
                     <ExamCountdown />
                   </div>
                 </div>
@@ -6278,6 +6518,21 @@ export default function App() {
                   semester={semester} 
                   onSelectTest={handleSelectTest} 
                   onOpenFavorites={(ids, title) => setShowFavorites({ semesterId: semester.id, title })}
+                  onOpenFoundation={() => {
+                    setShowFoundationVideos(true);
+                    localStorage.setItem('showFoundationVideos', 'true');
+                    const historyState = window.history.state;
+                    if (!historyState || historyState.screen !== 'foundation') {
+                      window.history.pushState({ screen: 'foundation' }, '');
+                    }
+                  }}
+                  onOpenResource={(res) => {
+                    setActiveResource({
+                      type: res.type,
+                      url: res.url,
+                      title: res.resourceTitle || res.videoTitle || 'المصدر التعليمي'
+                    });
+                  }}
                   initialIsExpanded={initialExpanded.semesterId === semester.id}
                   initialExpandedUnitId={initialExpanded.semesterId === semester.id ? initialExpanded.unitId : undefined}
                   initialExpandedLessonId={initialExpanded.semesterId === semester.id ? initialExpanded.lessonId : undefined}
@@ -6297,14 +6552,19 @@ export default function App() {
                     window.history.pushState({ screen: 'library' }, '');
                   }
                 }}
-                className="bg-white rounded-lg shadow-sm border border-black overflow-hidden mb-1 hover:bg-[#fcfaf7] cursor-pointer transition-colors p-4 flex items-center justify-between"
+                className="bg-white rounded-lg shadow-sm border border-black overflow-hidden mb-1 hover:bg-[#fcfaf7] cursor-pointer transition-colors p-4 flex items-center justify-between group"
               >
                 <div className="flex items-center gap-4">
-                  <div className="w-14 h-20 bg-emerald-600 rounded-lg text-white flex items-center justify-center overflow-hidden shrink-0">
-                    <BookOpen className="w-8 h-8 text-white" />
+                  <div className="w-14 h-20 bg-slate-100 rounded-lg border border-black overflow-hidden shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                    <img 
+                      src="https://raw.githubusercontent.com/MashalMath/Pdf_Library/main/Shamel12_Library_Cover.jpg" 
+                      alt="شعار المكتبة" 
+                      className="w-full h-full object-cover" 
+                      referrerPolicy="no-referrer" 
+                    />
                   </div>
                   <div className="text-right">
-                    <h3 className="text-base font-extrabold text-slate-900 font-mohand">المكتبة</h3>
+                    <h3 className="text-base font-extrabold text-slate-900 font-mohand group-hover:text-blue-600 transition-colors">المكتبة</h3>
                     <p className="text-slate-500 font-bold text-[11px] mt-2 leading-relaxed">
                       تصفح وتحميل اختبارات وامتحانات شاملة بصيغة PDF
                     </p>
@@ -6315,7 +6575,7 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-                <ChevronLeft className="w-5 h-5 text-slate-400 shrink-0" />
+                <ChevronLeft className="w-5 h-5 text-slate-400 shrink-0 group-hover:translate-x-[-2px] transition-transform" />
               </motion.div>
             </main>
 
@@ -6358,37 +6618,94 @@ export default function App() {
         onConfirm={handleExitConfirm}
       />
 
+      {/* Ministry Exam Schedule Notice Modal */}
       <AnimatePresence>
         {showExamScheduleImage && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center"
-          >
-            <button
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs select-none" dir="rtl">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
               onClick={() => {
                 setShowExamScheduleImage(false);
                 if (window.history.state?.screen === 'exam-schedule') {
                   window.history.back();
                 }
               }}
-              className="absolute top-4 right-4 w-12 h-12 bg-white/10 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition-colors z-[60] backdrop-blur-sm"
-            >
-              <X className="w-7 h-7" />
-            </button>
+              className="absolute inset-0"
+            />
             
             <motion.div 
-               initial={{ scale: 0.95, opacity: 0 }}
-               animate={{ scale: 1, opacity: 1 }}
-               transition={{ delay: 0.1, type: "spring", stiffness: 300, damping: 25 }}
-               className="w-full h-full overflow-auto flex items-center justify-center"
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              transition={{ type: "spring", stiffness: 350, damping: 25 }}
+              className="relative w-full max-w-sm bg-white border border-black rounded-xl p-6 shadow-xl z-10 flex flex-col items-center text-center font-mohand"
             >
-              <img src="https://i.postimg.cc/WbFxvwLp/FB-IMG-1775448504378.jpg" alt="تفاصيل الامتحان" className="w-full max-w-full h-auto object-contain p-2 md:p-8" referrerPolicy="no-referrer" />
+              <button
+                type="button"
+                onClick={() => {
+                  setShowExamScheduleImage(false);
+                  if (window.history.state?.screen === 'exam-schedule') {
+                    window.history.back();
+                  }
+                }}
+                className="absolute top-3 left-3 w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors border border-black cursor-pointer"
+                title="إغلاق"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div className="w-16 h-16 bg-white rounded-xl border border-black p-2 flex items-center justify-center mb-4 shadow-xs overflow-hidden">
+                <img 
+                  src="https://raw.githubusercontent.com/MashalMath/Pdf_Library/main/Ministry_Logo.jpg" 
+                  alt="نماذج وزارة متوقعة" 
+                  className="w-full h-full object-contain" 
+                  referrerPolicy="no-referrer" 
+                />
+              </div>
+
+              <h3 className="text-base font-black text-slate-900 mb-2">
+                برنامج امتحانات الوزارة
+              </h3>
+
+              <p className="text-sm font-bold text-slate-700 leading-relaxed max-w-xs">
+                سيتم عرض برنامج امتحانات الوزارة لجيل 2009 فور صدوره من وزارة التربية والتعليم
+              </p>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowExamScheduleImage(false);
+                  if (window.history.state?.screen === 'exam-schedule') {
+                    window.history.back();
+                  }
+                }}
+                className="mt-5 w-full py-2.5 px-4 rounded-lg bg-slate-900 hover:bg-black text-white text-sm font-bold border border-black transition-colors cursor-pointer"
+              >
+                حسناً
+              </button>
             </motion.div>
-          </motion.div>
+          </div>
         )}
       </AnimatePresence>
+
+      {/* Educational Resource Modals */}
+      <ResourceVideoModal
+        isOpen={activeResource?.type === 'video'}
+        resource={activeResource}
+        onClose={() => setActiveResource(null)}
+      />
+      <ResourceImageModal
+        isOpen={activeResource?.type === 'image'}
+        resource={activeResource}
+        onClose={() => setActiveResource(null)}
+      />
+      <ResourcePdfModal
+        isOpen={activeResource?.type === 'pdf'}
+        resource={activeResource}
+        onClose={() => setActiveResource(null)}
+      />
     </div>
   );
 }
