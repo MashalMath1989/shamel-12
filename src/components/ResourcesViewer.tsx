@@ -13,6 +13,7 @@ import {
   RotateCcw 
 } from 'lucide-react';
 import { ResourceItem, ActiveResourceModalState } from '../types/resources';
+import { FastPdfViewer } from './FastPdfViewer';
 
 // --- Normalization & Validation Utilities ---
 
@@ -281,7 +282,6 @@ export const ResourcePdfModal: React.FC<{
             <div className="flex items-center gap-2 shrink-0">
               <a
                 href={resource.url}
-                download
                 target="_blank"
                 rel="noopener noreferrer"
                 className="h-8 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1.5 transition-colors border border-blue-500 text-xs font-bold"
@@ -291,13 +291,14 @@ export const ResourcePdfModal: React.FC<{
                 <span className="hidden sm:inline">تنزيل</span>
               </a>
               <a
-                href={resource.url}
+                href={`https://docs.google.com/viewer?url=${encodeURIComponent(resource.url)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors border border-slate-700 text-xs"
-                title="فتح الرابط في نافذة جديدة"
+                className="h-8 px-2.5 sm:px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center gap-1.5 transition-colors border border-slate-700 text-xs font-bold"
+                title="فتح في المتصفح (عرض مباشر بدون تنزيل)"
               >
-                <ExternalLink className="w-4 h-4" />
+                <ExternalLink className="w-3.5 h-3.5 text-blue-400" />
+                <span className="hidden sm:inline">فتح في المتصفح</span>
               </a>
               <button
                 type="button"
@@ -315,11 +316,7 @@ export const ResourcePdfModal: React.FC<{
             {pdfViewerComponent ? (
               pdfViewerComponent
             ) : (
-              <iframe
-                src={`https://docs.google.com/viewer?url=${encodeURIComponent(resource.url)}&embedded=true`}
-                title={resource.title || 'عرض PDF'}
-                className="w-full h-full border-0"
-              />
+              <FastPdfViewer url={resource.url} title={resource.title || 'عرض PDF'} />
             )}
           </div>
         </motion.div>

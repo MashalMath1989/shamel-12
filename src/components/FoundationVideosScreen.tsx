@@ -205,6 +205,13 @@ export const FoundationVideosScreen: React.FC<{
 
   const handleCloseVideo = () => {
     setActiveVideo(null);
+    try {
+      if (window.history.state?.videoOpen) {
+        window.history.back();
+      }
+    } catch (e) {
+      console.warn("Could not step back in history:", e);
+    }
   };
 
   // Only show videos with valid URLs

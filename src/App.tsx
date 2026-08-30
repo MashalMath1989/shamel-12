@@ -11,6 +11,7 @@ import katex from 'katex';
 import renderMathInElement from 'katex/dist/contrib/auto-render';
 import 'katex/dist/katex.min.css';
 import { FoundationVideosScreen } from './components/FoundationVideosScreen';
+import { FastPdfViewer } from './components/FastPdfViewer';
 import { 
   ResourceVideoModal, 
   ResourceImageModal, 
@@ -2382,461 +2383,6 @@ const MinistryModelsScreen: React.FC<{
   );
 };
 
-interface FastPdfViewerProps {
-  url: string;
-  title: string;
-}
-
-const FastPdfViewer: React.FC<FastPdfViewerProps> = ({ url, title }) => {
-  const [loading, setLoading] = useState<boolean>(true);
-  const [progress, setProgress] = useState<number>(0);
-  const [error, setError] = useState<string | null>(null);
-  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
-  const [totalPages, setTotalPages] = useState<number>(0);
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [targetPageInput, setTargetPageInput] = useState<string>("");
-  const containerRef = useRef<HTMLDivElement>(null);
-  const viewerRef = useRef<HTMLDivElement>(null);
-  const pagesInnerRef = useRef<HTMLDivElement>(null);
-
-  const [zoomScale, setZoomScale] = useState<number>(1.0);
-
-  const touchStartRef = useRef<{
-    distance: number;
-    initialScale: number;
-    lastTap: number;
-  }>({
-    distance: 0,
-    initialScale: 1.0,
-    lastTap: 0,
-  });
-
-  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (e.touches.length === 1) {
-      const now = Date.now();
-      const timeDiff = now - touchStartRef.current.lastTap;
-      if (timeDiff < 280) {
-        // Double tap toggle zoom
-        e.preventDefault();
-        setZoomScale((prev) => (prev > 1.05 ? 1.0 : 2.2));
-        touchStartRef.current.lastTap = 0;
-        return;
-      }
-      touchStartRef.current.lastTap = now;
-    } else if (e.touches.length === 2) {
-      const t1 = e.touches[0];
-      const t2 = e.touches[1];
-      const distance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-      touchStartRef.current.distance = distance;
-      touchStartRef.current.initialScale = zoomScale;
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (e.touches.length === 2 && touchStartRef.current.distance > 0) {
-      if (e.cancelable) e.preventDefault();
-      const t1 = e.touches[0];
-      const t2 = e.touches[1];
-      const distance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-      const factor = distance / touchStartRef.current.distance;
-      
-      let newScale = touchStartRef.current.initialScale * factor;
-      if (newScale < 1.0) newScale = 1.0;
-      if (newScale > 3.5) newScale = 3.5;
-      
-      setZoomScale(Math.round(newScale * 10) / 10);
-    }
-  };
-
-  const handleTouchEnd = () => {
-    touchStartRef.current.distance = 0;
-  };
-
-  const handleDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setZoomScale((prev) => (prev > 1.05 ? 1.0 : 2.2));
-  };
-
-  // Monitor browser native fullscreen events
-  useEffect(() => {
-    const onFullscreenChange = () => {
-      setIsFullscreen(
-        !!(
-          document.fullscreenElement ||
-          (document as any).webkitFullscreenElement ||
-          (document as any).mozFullScreenElement ||
-          (document as any).msFullscreenElement
-        )
-      );
-    };
-
-    document.addEventListener("fullscreenchange", onFullscreenChange);
-    document.addEventListener("webkitfullscreenchange", onFullscreenChange);
-    document.addEventListener("mozfullscreenchange", onFullscreenChange);
-    document.addEventListener("MSFullscreenChange", onFullscreenChange);
-
-    return () => {
-      document.removeEventListener("fullscreenchange", onFullscreenChange);
-      document.removeEventListener("webkitfullscreenchange", onFullscreenChange);
-      document.removeEventListener("mozfullscreenchange", onFullscreenChange);
-      document.removeEventListener("MSFullscreenChange", onFullscreenChange);
-    };
-  }, []);
-
-  const toggleFullscreen = async () => {
-    if (!viewerRef.current) return;
-    try {
-      const elem = viewerRef.current as any;
-      if (!isFullscreen) {
-        if (elem.requestFullscreen) {
-          await elem.requestFullscreen();
-        } else if (elem.webkitRequestFullscreen) {
-          await elem.webkitRequestFullscreen();
-        } else if (elem.mozRequestFullScreen) {
-          await elem.mozRequestFullScreen();
-        } else if (elem.msRequestFullscreen) {
-          await elem.msRequestFullscreen();
-        } else {
-          // Fallback to absolute pseudo fullscreen if browser blocked/unsupported
-          setIsFullscreen(true);
-        }
-      } else {
-        if (document.exitFullscreen) {
-          await document.exitFullscreen();
-        } else if ((document as any).webkitExitFullscreen) {
-          await (document as any).webkitExitFullscreen();
-        } else if ((document as any).mozCancelFullScreen) {
-          await (document as any).mozCancelFullScreen();
-        } else if ((document as any).msExitFullscreen) {
-          await (document as any).msExitFullscreen();
-        } else {
-          setIsFullscreen(false);
-        }
-      }
-    } catch (err) {
-      console.warn("Fullscreen toggle error, using fallback instead:", err);
-      setIsFullscreen(!isFullscreen);
-    }
-  };
-
-  useEffect(() => {
-    let isMounted = true;
-    let pdfDoc: any = null;
-    const renderTasks: any[] = [];
-
-    const loadAndRender = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        // Load PDF.js from a robust public cloudflare CDN dynamically
-        if (!(window as any).pdfjsLib) {
-          await new Promise<void>((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js";
-            script.async = true;
-            script.onload = () => {
-              (window as any).pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
-              resolve();
-            };
-            script.onerror = () => {
-              reject(new Error("Failed to load PDF library"));
-            };
-            document.head.appendChild(script);
-          });
-        }
-
-        const pdfjsLib = (window as any).pdfjsLib;
-        if (!pdfjsLib) throw new Error("PDF.js library not loaded");
-
-        // Request document via AJAX (enables smooth download progress and prevents blockages)
-        const loadingTask = pdfjsLib.getDocument({
-          url: url,
-          withCredentials: false
-        });
-
-        loadingTask.onProgress = (progressData: any) => {
-          if (progressData.total > 0) {
-            const percentage = Math.round((progressData.loaded / progressData.total) * 100);
-            if (isMounted) setProgress(percentage);
-          }
-        };
-
-        pdfDoc = await loadingTask.promise;
-        if (!isMounted) return;
-
-        setTotalPages(pdfDoc.numPages);
-        setLoading(false);
-
-        const container = pagesInnerRef.current;
-        if (!container) return;
-        container.innerHTML = '';
-
-        // Sequential rendering of pages in high definition scale
-        for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
-          if (!isMounted) return;
-
-          const page = await pdfDoc.getPage(pageNum);
-          
-          const pageWrapper = document.createElement('div');
-          pageWrapper.id = `pdf-page-${pageNum}`;
-          pageWrapper.className = 'relative bg-white my-3.5 shadow-md rounded-xl overflow-hidden border border-slate-300 p-1 flex flex-col items-center select-none';
-          
-          const label = document.createElement('div');
-          label.className = 'text-[9.5px] text-slate-400 font-extrabold mb-1 font-mohand select-none';
-          label.textContent = `ورقة اختبار • صفحة ${pageNum} من ${pdfDoc.numPages}`;
-          pageWrapper.appendChild(label);
-
-          const canvas = document.createElement('canvas');
-          canvas.className = 'w-full h-auto max-w-full rounded shadow-sm';
-          pageWrapper.appendChild(canvas);
-
-          container.appendChild(pageWrapper);
-
-          const ctx = canvas.getContext('2d');
-          if (!ctx) continue;
-
-          // Render scale 1.6 - standard perfect crispness for all screens
-          const viewport = page.getViewport({ scale: 1.6 });
-          canvas.width = viewport.width;
-          canvas.height = viewport.height;
-
-          const renderContext = {
-            canvasContext: ctx,
-            viewport: viewport
-          };
-
-          const renderTask = page.render(renderContext);
-          renderTasks.push(renderTask);
-          await renderTask.promise;
-        }
-
-      } catch (err: any) {
-        console.error("PDF Rendering failed:", err);
-        if (isMounted) {
-          setError(err.message || "Failed to render PDF");
-        }
-      }
-    };
-
-    loadAndRender();
-
-    return () => {
-      isMounted = false;
-      try {
-        renderTasks.forEach(t => {
-          if (t && typeof t.destroy === 'function') t.destroy();
-        });
-        if (pdfDoc && typeof pdfDoc.destroy === 'function') {
-          pdfDoc.destroy();
-        }
-      } catch (e) {
-        console.warn("PDF cleanup failed:", e);
-      }
-    };
-  }, [url]);
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center p-8 text-center bg-slate-50 border border-slate-200 rounded-xl min-h-[300px]">
-        <FileText className="w-10 h-10 text-red-500 mb-3" />
-        <span className="text-red-500 font-black mb-2 text-xs font-mohand">تعذر تحميل أو تصيير مستند الـ PDF حالياً</span>
-        <button 
-          onClick={() => window.location.reload()}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-lg shadow-sm transition-colors font-mohand"
-        >
-          أعد المحاولة
-        </button>
-      </div>
-    );
-  }
-
-  const handleScroll = () => {
-    if (!containerRef.current || totalPages === 0) return;
-    const container = containerRef.current;
-    const containerRect = container.getBoundingClientRect();
-    
-    let activePage = 1;
-    let minDistance = Infinity;
-
-    for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-      const pageEl = document.getElementById(`pdf-page-${pageNum}`);
-      if (pageEl) {
-        const rect = pageEl.getBoundingClientRect();
-        const distance = Math.abs(rect.top - containerRect.top);
-        if (distance < minDistance) {
-          minDistance = distance;
-          activePage = pageNum;
-        }
-      }
-    }
-    
-    if (currentPage !== activePage) {
-      setCurrentPage(activePage);
-    }
-  };
-
-  const jumpToPage = (pageNum: number) => {
-    if (isNaN(pageNum)) return;
-    let target = pageNum;
-    if (target < 1) target = 1;
-    if (target > totalPages) target = totalPages;
-    
-    const pageElement = document.getElementById(`pdf-page-${target}`);
-    if (pageElement) {
-      pageElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      setCurrentPage(target);
-      setTargetPageInput("");
-    }
-  };
-
-  return (
-    <div 
-      ref={viewerRef}
-      className={`relative w-full h-full flex flex-col bg-sky-100 transition-all duration-350 select-none ${
-        isFullscreen 
-          ? 'fixed inset-0 z-[9999] w-screen h-screen p-4 bg-sky-100' 
-          : 'rounded-2xl overflow-hidden'
-      }`}
-    >
-      {/* Immersive interactive floating action panel */}
-      {!loading && (
-        <div className="absolute top-4 left-4 z-40 flex flex-wrap items-center gap-2 bg-slate-950 border-2 border-blue-500 rounded-xl p-1.5 shadow-[0_10px_30px_rgba(2,132,199,0.25)] select-none max-w-[calc(100vw-2rem)]">
-          <button
-            type="button"
-            onClick={toggleFullscreen}
-            className="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-800 hover:bg-blue-600 active:bg-blue-700 text-white hover:scale-105 active:scale-95 transition-all cursor-pointer shadow-md border border-slate-600 text-xs"
-            title={isFullscreen ? "تصغير الشاشة" : "تكبير ملء الشاشة"}
-          >
-            {isFullscreen ? (
-              <Minimize2 className="w-4.5 h-4.5" />
-            ) : (
-              <Maximize2 className="w-4.5 h-4.5" />
-            )}
-          </button>
-
-          <div className="h-5 w-[1px] bg-slate-600" />
-
-          {/* Quick Manual Zoom Controls */}
-          <button
-            type="button"
-            onClick={() => setZoomScale((prev) => Math.max(1.0, prev - 0.2))}
-            disabled={zoomScale <= 1.0}
-            className="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800 disabled:cursor-not-allowed text-white hover:scale-105 active:scale-95 transition-all cursor-pointer shadow-md border border-slate-600 text-xs"
-            title="تصغير"
-          >
-            <ZoomOut className="w-4 h-4" />
-          </button>
-
-          <span className="text-[10px] font-mono font-black text-blue-400 min-w-[34px] text-center" dir="ltr">
-            {Math.round(zoomScale * 100)}%
-          </span>
-
-          <button
-            type="button"
-            onClick={() => setZoomScale((prev) => Math.min(3.5, prev + 0.2))}
-            disabled={zoomScale >= 3.5}
-            className="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800 disabled:cursor-not-allowed text-white hover:scale-105 active:scale-95 transition-all cursor-pointer shadow-md border border-slate-600 text-xs"
-            title="تكبير"
-          >
-            <ZoomIn className="w-4 h-4" />
-          </button>
-
-          <div className="h-5 w-[1px] bg-slate-600" />
-
-          {/* Page Selector input form */}
-          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-white shadow-inner" dir="rtl">
-            <span className="text-[10px] font-black text-slate-200 font-mohand">صفحة:</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={targetPageInput}
-              onChange={(e) => {
-                const val = e.target.value.replace(/[^0-9]/g, '');
-                setTargetPageInput(val);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  const num = parseInt(targetPageInput, 10);
-                  if (!isNaN(num)) {
-                    jumpToPage(num);
-                  }
-                }
-              }}
-              placeholder={currentPage.toString()}
-              className="w-10 h-7 text-center bg-slate-950 border border-slate-700 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none text-white rounded font-mono text-xs font-black transition-all"
-            />
-            {totalPages > 0 && (
-              <span className="text-[10px] font-black text-slate-200 font-mono">/ {totalPages}</span>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                const num = parseInt(targetPageInput, 10);
-                if (!isNaN(num)) {
-                  jumpToPage(num);
-                }
-              }}
-              className="px-2.5 h-7 rounded bg-blue-500 hover:bg-blue-600 hover:scale-105 active:scale-95 text-[10px] font-extrabold font-mohand text-white transition-all cursor-pointer border border-blue-450 shadow-md"
-            >
-              انتقال
-            </button>
-          </div>
-
-          {isFullscreen && (
-            <span className="text-[10px] pr-2.5 font-black text-blue-300 font-mohand border-r border-slate-700 rtl:border-r-0 rtl:border-l pl-1 hidden sm:inline-block">
-              وضع ملء الشاشة المتفاعل
-            </span>
-          )}
-        </div>
-      )}
-
-      {loading && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-sky-100/95 text-slate-800 p-6 z-35 rounded-2xl">
-          <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4" />
-          <p className="text-xs font-black font-mohand leading-relaxed text-center">جاري سحب وتصيير صفحات الاختبار لسرعة استعراض وتصفح خارقة...</p>
-          <div className="w-48 bg-blue-100 h-2 rounded-full overflow-hidden mt-3 border border-blue-200">
-            <div 
-              className="bg-blue-600 h-full transition-all duration-300"
-              style={{ width: `${progress || 10}%` }}
-            />
-          </div>
-          <span className="text-[9px] font-bold text-blue-600 mt-2 font-mono">{progress}% loaded</span>
-        </div>
-      )}
-
-      <div 
-        ref={containerRef} 
-        onScroll={handleScroll}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onDoubleClick={handleDoubleClick}
-        className={`w-full h-full p-2 bg-sky-100 transition-all ${
-          zoomScale > 1.05 ? 'overflow-auto touch-pan-x touch-pan-y' : 'overflow-y-auto overflow-x-hidden'
-        }`}
-        dir="rtl"
-        style={{
-          maxHeight: '100%',
-          WebkitOverflowScrolling: 'touch',
-          scrollBehavior: 'smooth'
-        }}
-      >
-        <div
-          ref={pagesInnerRef}
-          className="transition-transform duration-150 ease-out origin-top-center w-full min-h-full flex flex-col items-center"
-          style={{
-            transform: `scale(${zoomScale})`,
-            transformOrigin: 'top center',
-            marginBottom: `${(zoomScale - 1) * 85}%`
-          }}
-        />
-      </div>
-    </div>
-  );
-};
-
 export const formatFileSize = (size: any): string | null => {
   if (size === undefined || size === null || size === '') return null;
   if (typeof size === 'number') {
@@ -2883,41 +2429,14 @@ export const formatFileSize = (size: any): string | null => {
 
 const LibraryScreen: React.FC<{ 
   onBack: () => void;
-}> = ({ onBack }) => {
+  onOpenResource?: (resource: ActiveResourceModalState) => void;
+}> = ({ onBack, onOpenResource }) => {
   const [activeFilter, setActiveFilter] = useState<'semester1' | 'semester2' | 'both'>('semester1');
   const libraryUrl = 'https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/MATH12_Library.json';
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [selectedPdf, setSelectedPdf] = useState<{ title: string; pdfUrl: string; fileSize?: string } | null>(null);
+  const [activeLocalResource, setActiveLocalResource] = useState<ActiveResourceModalState | null>(null);
   const [dynamicSizes, setDynamicSizes] = useState<Record<string, string>>({});
-
-  // Handle phone/browser back button to gracefully return to library listings from PDF view
-  useEffect(() => {
-    if (!selectedPdf) return;
-
-    try {
-      window.history.pushState({ pdfOpen: true }, "");
-    } catch (e) {
-      console.warn("Could not push state to window history:", e);
-    }
-
-    const handlePopState = (event: PopStateEvent) => {
-      setSelectedPdf(null);
-    };
-
-    window.addEventListener('popstate', handlePopState);
-
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-      try {
-        if (window.history.state?.pdfOpen) {
-          window.history.back();
-        }
-      } catch (e) {
-        console.warn("Could not clean up window history state:", e);
-      }
-    };
-  }, [selectedPdf]);
 
   const hasValidFileUrl = (exam: any): boolean => {
     if (!exam) return false;
@@ -2967,44 +2486,6 @@ const LibraryScreen: React.FC<{
       }
     ].filter(hasValidFileUrl);
   });
-
-  // Query Content-Length for files if explicit size is not given in JSON
-  useEffect(() => {
-    if (!pdfExams || pdfExams.length === 0) return;
-
-    const controller = new AbortController();
-
-    pdfExams.forEach(async (exam) => {
-      const explicitSize = exam.fileSize || exam.size || exam.sizeText || exam.sizeMB || exam.file_size || exam.size_bytes;
-      if (explicitSize) return;
-
-      const rawUrl = exam.pdfUrl || exam.url || exam.fileUrl;
-      if (!rawUrl || !isValidResourceUrl(rawUrl)) return;
-
-      try {
-        const res = await fetch(rawUrl, {
-          method: 'HEAD',
-          signal: controller.signal
-        });
-        if (res.ok) {
-          const len = res.headers.get('content-length');
-          if (len) {
-            const bytes = parseInt(len, 10);
-            if (!isNaN(bytes) && bytes > 0) {
-              const formatted = formatFileSize(bytes);
-              if (formatted) {
-                setDynamicSizes(prev => ({ ...prev, [rawUrl]: formatted }));
-              }
-            }
-          }
-        }
-      } catch (e) {}
-    });
-
-    return () => {
-      controller.abort();
-    };
-  }, [pdfExams]);
 
   const loadLibraryData = async () => {
     setLoading(true);
@@ -3065,112 +2546,20 @@ const LibraryScreen: React.FC<{
     return u === "" || u.includes("رابط_الصورة") || u.startsWith("placeholder") || !u.startsWith("http");
   };
 
-  // If a PDF is selected to be shown in-app via active built-in viewer
-  if (selectedPdf) {
-    const rawPdfUrl = selectedPdf.pdfUrl || (selectedPdf as any).url || "";
-    const resolvedUrl = typeof rawPdfUrl === 'string' ? rawPdfUrl.trim() : String(rawPdfUrl || '').trim();
-    const isMockUrl = resolvedUrl.startsWith("رابط_الملف") || resolvedUrl === "" || !resolvedUrl.startsWith("http");
-
-    // Dynamic File Type check (PDF vs DOC/Word)
-    const lowerUrl = resolvedUrl.toLowerCase();
-    const lowerTitle = String(selectedPdf.title || "").toLowerCase();
-    const isDoc = lowerUrl.endsWith(".doc") || lowerUrl.endsWith(".docx") || lowerUrl.includes(".doc?") || lowerUrl.includes(".docx?") || lowerTitle.includes("word") || lowerTitle.includes("وورد") || lowerTitle.includes("docx") || lowerTitle.includes("doc");
-
-    return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.98 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.98 }}
-        transition={{ duration: 0.15, ease: "easeOut" }}
-        className="max-w-xl mx-auto p-4 font-mohand text-right"
-      >
-        <header className="mb-4 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={() => setSelectedPdf(null)}
-              className="w-10 h-10 rounded-xl bg-white shadow-sm border border-black flex items-center justify-center text-slate-600 hover:bg-blue-50 transition-colors shrink-0"
-              title="الرجوع إلى قائمة المكتبة"
-            >
-              <ArrowRight className="w-5 h-5" />
-            </button>
-          </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            <a
-              href={isMockUrl ? "#" : resolvedUrl}
-              target={isMockUrl ? undefined : "_blank"}
-              rel="noopener noreferrer"
-              onClick={(e) => {
-                if (isMockUrl) {
-                  e.preventDefault();
-                  alert("هذا نموذج اختبار تجريبي، وسيتم رفع النسخة الكاملة والمعتمدة قريباً بالتنسيق مع الأكاديمية.");
-                }
-              }}
-              className={`px-3 h-10 rounded-xl text-white font-black text-xs transition-all shadow-sm flex items-center gap-1.5 hover:scale-105 active:scale-95 ${
-                isDoc 
-                  ? "bg-blue-600 hover:bg-blue-700 border border-blue-700" 
-                  : "bg-red-600 hover:bg-red-700 border border-red-700"
-              }`}
-              title={isDoc ? `تحميل مستند Word DOCX ${selectedPdf.fileSize ? `(${selectedPdf.fileSize})` : ''}` : `تحميل مستند PDF ${selectedPdf.fileSize ? `(${selectedPdf.fileSize})` : ''}`}
-            >
-              <Download className="w-4 h-4" />
-              <span>تحميل {isDoc ? "Word" : "PDF"}</span>
-              {selectedPdf.fileSize && (
-                <span className="text-[10px] bg-black/20 px-1.5 py-0.5 rounded font-bold" dir="ltr">
-                  {selectedPdf.fileSize}
-                </span>
-              )}
-            </a>
-          </div>
-        </header>
-
-        {/* Beautiful card showing only the file name above with the distinguished icon and suffix */}
-        <div className="bg-gradient-to-r from-blue-50/85 to-indigo-50/85 border border-black rounded-2xl p-4 mb-4 shadow-sm text-center flex items-center justify-center gap-2">
-          <FileText className={`w-4 h-4 shrink-0 ${isDoc ? "text-blue-600" : "text-red-600"}`} />
-          <h2 className="text-xs font-black text-slate-800 leading-relaxed break-words max-w-sm">
-            {selectedPdf.title} {isDoc ? " (Word)" : " (PDF)"}
-          </h2>
-        </div>
-        {isMockUrl ? (
-          <div className="bg-white rounded-2xl p-8 text-center border border-black shadow-sm flex flex-col items-center justify-center min-h-[380px] font-mohand">
-            <div className="w-16 h-16 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mb-4 border border-amber-100">
-              <FileText className="w-8 h-8" />
-            </div>
-            <h3 className="text-base font-extrabold text-slate-800 mb-2">الملف قيد التجهيز</h3>
-            <p className="text-slate-500 text-xs font-bold max-w-sm leading-relaxed mb-6">
-              يعمل طاقم الإعداد والأكاديمية حالياً على تدقيق ومواءمة النسخة الإلكترونية النهائية من هذا الملف. سيتم إقراره وإدراجه مكملاً للمنهاج قريباً جداً.
-            </p>
-            <button
-              onClick={() => setSelectedPdf(null)}
-              className="px-5 py-2.5 rounded-xl bg-slate-100 border border-black text-slate-800 font-extrabold text-xs hover:bg-slate-200 transition-all shadow-sm"
-            >
-              العودة لقائمة الامتحانات
-            </button>
-          </div>
-        ) : (
-          <div className="w-full bg-sky-100 rounded-2xl overflow-hidden border border-blue-200 shadow-md relative h-[520px] md:h-[600px]">
-            <iframe
-              src={`https://docs.google.com/gview?url=${encodeURIComponent(resolvedUrl)}&embedded=true`}
-              className="w-full h-full bg-white relative z-10"
-              style={{ border: 'none' }}
-              title={selectedPdf.title}
-              allow="autoplay"
-            />
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-sky-100 text-slate-700 p-6 z-0">
-              <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-3" />
-              <p className="text-xs font-bold font-mohand justify-center flex items-center gap-1.5 direction-rtl">
-                جاري تحميل مستند الـ {isDoc ? "Word" : "PDF"}...
-              </p>
-            </div>
-          </div>
-        )}
-
-        <div className="mt-6 text-center text-slate-400 text-[10px] font-bold font-mohand">
-          منصة الشامل في الرياضيات المتقدم © كافة الحقوق محفوظة ٢٠٢٦
-        </div>
-      </motion.div>
-    );
-  }
+  const handleOpenExam = (exam: any) => {
+    const rawFileUrl = exam?.pdfUrl || exam?.url || exam?.fileUrl || "";
+    if (!rawFileUrl || !hasValidFileUrl(exam)) return;
+    const itemState: ActiveResourceModalState = {
+      type: 'pdf',
+      url: typeof rawFileUrl === 'string' ? rawFileUrl.trim() : String(rawFileUrl || '').trim(),
+      title: exam?.title || 'ملف الامتحان'
+    };
+    if (onOpenResource) {
+      onOpenResource(itemState);
+    } else {
+      setActiveLocalResource(itemState);
+    }
+  };
 
   return (
     <motion.div
@@ -3265,7 +2654,7 @@ const LibraryScreen: React.FC<{
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
-                onClick={() => setSelectedPdf({ title: exam.title, pdfUrl: exam.pdfUrl || exam.url, fileSize: displaySize || undefined })}
+                onClick={() => handleOpenExam(exam)}
                 className="bg-white rounded-xl p-4 shadow-sm border border-black flex items-center justify-between gap-4 group hover:shadow-md hover:bg-slate-50/50 cursor-pointer transition-all relative overflow-hidden text-right"
               >
                 {/* Outer item content */}
@@ -3388,6 +2777,13 @@ const LibraryScreen: React.FC<{
       <div className="mt-8 bg-amber-50 rounded-xl p-4 border border-amber-200 text-right text-amber-900 text-xs font-bold leading-relaxed">
         💡 <span className="font-semibold text-amber-950">ملاحظة للطلاب:</span> سيتم تزويدكم بالامتحانات المباشرة وروابط تنزيلها أولا بأول على منصة الشامل في الرياضيات المتقدم.
       </div>
+
+      {/* Local PDF Resource Modal fallback if needed */}
+      <ResourcePdfModal
+        isOpen={!!activeLocalResource}
+        resource={activeLocalResource}
+        onClose={() => setActiveLocalResource(null)}
+      />
     </motion.div>
   );
 };
@@ -6177,6 +5573,39 @@ export default function App() {
   });
   const [backRequested, setBackRequested] = useState(0);
 
+  const handleCloseResource = () => {
+    setActiveResource(null);
+    try {
+      if (window.history.state?.resourceModal) {
+        window.history.back();
+      }
+    } catch (e) {
+      console.warn("Could not step back in history:", e);
+    }
+  };
+
+  // Push history state when a resource modal (PDF, video, image) opens to enable phone back button
+  useEffect(() => {
+    if (!activeResource) return;
+
+    let currentScreen = 'home';
+    if (showExitConfirm) currentScreen = 'exit-confirm';
+    else if (showAbout) currentScreen = 'about';
+    else if (showFavorites) currentScreen = 'favorites';
+    else if (showExamScheduleImage) currentScreen = 'exam-schedule';
+    else if (selectedTest) currentScreen = 'exam';
+    else if (selectedAdvExam) currentScreen = 'adv-exam';
+    else if (showMinistryModels) currentScreen = 'models';
+    else if (showLibrary) currentScreen = 'library';
+    else if (showFoundationVideos) currentScreen = 'foundation';
+
+    try {
+      window.history.pushState({ screen: currentScreen, resourceModal: true }, '');
+    } catch (e) {
+      console.warn("Could not push resource modal state to history:", e);
+    }
+  }, [activeResource]);
+
   const handleSelectTest = (num: number, url?: string, ids?: { semesterId?: number, unitId?: number, lessonId?: number }) => {
     if (ids) {
       setInitialExpanded(ids);
@@ -6487,6 +5916,7 @@ export default function App() {
                 window.history.back();
               }
             }}
+            onOpenResource={(res) => setActiveResource(res)}
           />
         ) : (
           <motion.div
@@ -6820,17 +6250,17 @@ export default function App() {
       <ResourceVideoModal
         isOpen={activeResource?.type === 'video'}
         resource={activeResource}
-        onClose={() => setActiveResource(null)}
+        onClose={handleCloseResource}
       />
       <ResourceImageModal
         isOpen={activeResource?.type === 'image'}
         resource={activeResource}
-        onClose={() => setActiveResource(null)}
+        onClose={handleCloseResource}
       />
       <ResourcePdfModal
         isOpen={activeResource?.type === 'pdf'}
         resource={activeResource}
-        onClose={() => setActiveResource(null)}
+        onClose={handleCloseResource}
       />
     </div>
   );
