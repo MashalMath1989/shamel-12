@@ -266,7 +266,7 @@ export const ResourcePdfModal: React.FC<{
           initial={{ scale: 0.95, opacity: 0, y: 15 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.95, opacity: 0, y: 15 }}
-          className="relative w-full max-w-4xl bg-slate-900 border-2 border-black rounded-2xl overflow-hidden shadow-2xl z-10 flex flex-col font-mohand text-white h-[88vh]"
+          className="relative w-full max-w-4xl bg-slate-900 border-2 border-black rounded-2xl overflow-hidden shadow-2xl z-10 flex flex-col font-mohand text-white h-[94vh] sm:h-[90vh]"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-slate-950 border-b border-slate-800 shrink-0">

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronDown, ChevronLeft, ChevronRight, BookOpen, GraduationCap, ArrowRight, ArrowLeft, CheckCircle2, XCircle, Loader2, RefreshCcw, Clock, Lightbulb, X, Printer, FileText, AlertTriangle, Download, FileDown, Star, Share2, Flag, Trash2, Info, LogOut, Mail, Lock, User as UserIcon, LogIn, Menu, Check, History, Settings, Link, ExternalLink, Maximize2, Minimize2, Eye, Moon, Sun, ZoomIn, ZoomOut, Play } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, BookOpen, GraduationCap, ArrowRight, ArrowLeft, CheckCircle2, XCircle, Loader2, RefreshCcw, Clock, Lightbulb, X, Printer, FileText, AlertTriangle, Download, FileDown, Star, Share2, Flag, Trash2, Info, LogOut, Mail, Lock, User as UserIcon, LogIn, Menu, Check, History, Settings, Link, ExternalLink, Maximize2, Minimize2, Eye, Moon, Sun, ZoomIn, ZoomOut, Play, Copy, MessageCircle, Send } from 'lucide-react';
 import { auth, db, OperationType, handleFirestoreError } from './firebase';
 import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, User as FirebaseUser, GoogleAuthProvider, browserPopupRedirectResolver } from 'firebase/auth';
 import { doc, setDoc, getDoc, collection, query, where, getDocs, onSnapshot, addDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
@@ -737,7 +737,7 @@ const ACADEMIC_DATA: Semester[] = [
   {
     id: 1,
     title: "الفصل الدراسي الأول",
-    imageUrl: "https://i.postimg.cc/LX9Fmf1G/1776660258706.png",
+    imageUrl: "https://raw.githubusercontent.com/MashalMath/Pdf_Library/main/Math12_S1_Cover.png",
     units: [
       {
         id: 1,
@@ -954,7 +954,7 @@ const ACADEMIC_DATA: Semester[] = [
   {
     id: 2,
     title: "الفصل الدراسي الثاني",
-    imageUrl: "https://i.postimg.cc/KvkScmRH/1776660186966.png",
+    imageUrl: "https://raw.githubusercontent.com/MashalMath/Pdf_Library/main/Math12_S2_Cover.png",
     units: [
       {
         id: 5,
@@ -2561,6 +2561,75 @@ const LibraryScreen: React.FC<{
     }
   };
 
+  // Share & Clipboard States
+  const [shareExamModal, setShareExamModal] = useState<any | null>(null);
+  const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+  const [shareToast, setShareToast] = useState<{ message: string; type?: 'success' | 'info' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'info' = 'success') => {
+    setShareToast({ message, type });
+    setTimeout(() => {
+      setShareToast((current) => (current?.message === message ? null : current));
+    }, 3000);
+  };
+
+  const copyUrlToClipboard = async (url: string, title?: string) => {
+    if (!url) return false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = url;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setCopiedUrl(url);
+      showToast(`تم نسخ رابط "${title || 'الملف'}" إلى الحافظة بنجاح! 📋`, 'success');
+      setTimeout(() => {
+        setCopiedUrl((curr) => (curr === url ? null : curr));
+      }, 2500);
+      return true;
+    } catch (err) {
+      console.error("Copy failed:", err);
+      showToast("تعذر نسخ الرابط تلقائياً، يرجى نسخه يدوياً.", 'info');
+      return false;
+    }
+  };
+
+  const handleNativeShare = async (exam: any) => {
+    const rawUrl = exam?.pdfUrl || exam?.url || exam?.fileUrl || "";
+    const title = exam?.title || "ملف دراسي";
+    const shareData = {
+      title: title,
+      text: `${title} - الشامل في الرياضيات للتوجيهي العلمي`,
+      url: rawUrl,
+    };
+
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share(shareData);
+        showToast("تمت المشاركة بنجاح! 🚀", 'success');
+        setShareExamModal(null);
+        return;
+      } catch (err: any) {
+        if (err.name === 'AbortError') {
+          // User closed share dialog without completing
+          return;
+        }
+        console.warn("navigator.share failed, falling back to clipboard:", err);
+      }
+    }
+
+    // Fallback if Web Share API is blocked (e.g., in iframe or unsupported desktop)
+    await copyUrlToClipboard(rawUrl, title);
+    showToast("تم نسخ رابط الملف إلى الحافظة لعدم توفر المشاركة المباشرة في المتصفح.", 'info');
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.98 }}
@@ -2741,28 +2810,44 @@ const LibraryScreen: React.FC<{
                   </div>
                 </div>
 
-                {/* Dynamic click link or direct files load */}
-                <a
-                  href={exam.pdfUrl || exam.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`w-9 h-9 rounded-lg border flex items-center justify-center transition-all shrink-0 shadow-sm z-20 hover:scale-105 active:scale-95 ${
-                    isExamDoc 
-                      ? 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-600 hover:text-white' 
-                      : 'bg-red-50 text-red-600 border-red-100 hover:bg-red-600 hover:text-white'
-                  }`}
-                  title={isExamDoc ? "تنزيل مستند وورد" : "تنزيل مستند PDF"}
-                  onClick={(e) => {
-                    e.stopPropagation(); // Avoid triggering card view on clicking the download button immediately
-                    const resolvedUrl = exam.pdfUrl || exam.url || "";
-                    if (resolvedUrl.startsWith("رابط_الملف") || resolvedUrl === "") {
-                      e.preventDefault();
-                      alert("هذا رابط تجريبي مؤقت. سيتم استبداله برابط الملف الفعلي للملف المرفق قريباً!");
-                    }
-                  }}
-                >
-                  <Download className="w-4 h-4" />
-                </a>
+                {/* Actions: Share & Download */}
+                <div className="flex items-center gap-1.5 shrink-0 z-20" onClick={(e) => e.stopPropagation()}>
+                  {/* Share button */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShareExamModal(exam);
+                    }}
+                    className="w-9 h-9 rounded-lg border border-blue-200 bg-blue-50/80 text-blue-600 hover:bg-blue-600 hover:text-white flex items-center justify-center transition-all shadow-xs hover:scale-105 active:scale-95 cursor-pointer"
+                    title="مشاركة رابط الملف أو نسخه"
+                  >
+                    <Share2 className="w-4 h-4" />
+                  </button>
+
+                  {/* Dynamic click link or direct files load */}
+                  <a
+                    href={exam.pdfUrl || exam.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`w-9 h-9 rounded-lg border flex items-center justify-center transition-all shrink-0 shadow-xs hover:scale-105 active:scale-95 ${
+                      isExamDoc 
+                        ? 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-600 hover:text-white' 
+                        : 'bg-red-50 text-red-600 border-red-100 hover:bg-red-600 hover:text-white'
+                    }`}
+                    title={isExamDoc ? "تنزيل مستند وورد" : "تنزيل مستند PDF"}
+                    onClick={(e) => {
+                      e.stopPropagation(); // Avoid triggering card view on clicking the download button immediately
+                      const resolvedUrl = exam.pdfUrl || exam.url || "";
+                      if (resolvedUrl.startsWith("رابط_الملف") || resolvedUrl === "") {
+                        e.preventDefault();
+                        alert("هذا رابط تجريبي مؤقت. سيتم استبداله برابط الملف الفعلي للملف المرفق قريباً!");
+                      }
+                    }}
+                  >
+                    <Download className="w-4 h-4" />
+                  </a>
+                </div>
               </motion.div>
             );
           })
@@ -2784,6 +2869,180 @@ const LibraryScreen: React.FC<{
         resource={activeLocalResource}
         onClose={() => setActiveLocalResource(null)}
       />
+
+      {/* Share Modal Dialog */}
+      <AnimatePresence>
+        {shareExamModal && (
+          <div 
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs font-mohand" 
+            dir="rtl"
+            onClick={() => setShareExamModal(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden text-right"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-3.5 bg-slate-900 text-white border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-blue-600/30 border border-blue-400/30 flex items-center justify-center text-blue-400">
+                    <Share2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black">مشاركة الملف</h3>
+                    <p className="text-[10px] text-slate-400">شارك المستند مع زملائك أو انسخ رابطه المباشر</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShareExamModal(null)}
+                  className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                  title="إغلاق"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="p-4 space-y-3.5">
+                {/* File summary */}
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-xs font-black text-slate-900 leading-snug line-clamp-2">
+                      {shareExamModal.title}
+                    </h4>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[9px] px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded font-bold">
+                        {shareExamModal.semester || "امتحان تجريبي"}
+                      </span>
+                      {shareExamModal.fileSize && (
+                        <span className="text-[9px] text-slate-500 font-mono font-bold" dir="ltr">
+                          {shareExamModal.fileSize}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Primary Action 1: Web Share API */}
+                <button
+                  type="button"
+                  onClick={() => handleNativeShare(shareExamModal)}
+                  className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer group"
+                >
+                  <Share2 className="w-4 h-4 text-blue-200 group-hover:scale-110 transition-transform" />
+                  <span>مشاركة عبر تطبيقات التواصل (Web Share API)</span>
+                </button>
+
+                {/* Primary Action 2: Copy Direct Link to Clipboard */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = shareExamModal.pdfUrl || shareExamModal.url || shareExamModal.fileUrl || "";
+                    copyUrlToClipboard(url, shareExamModal.title);
+                  }}
+                  className={`w-full py-3 px-4 rounded-xl border font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    copiedUrl === (shareExamModal.pdfUrl || shareExamModal.url || shareExamModal.fileUrl)
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                      : 'bg-slate-100 hover:bg-slate-200/80 border-slate-300 text-slate-800'
+                  }`}
+                >
+                  {copiedUrl === (shareExamModal.pdfUrl || shareExamModal.url || shareExamModal.fileUrl) ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-600" />
+                      <span>تم نسخ الرابط إلى الحافظة بنجاح! ✓</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 text-slate-600" />
+                      <span>نسخ رابط الملف مباشرة إلى الحافظة</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Direct quick share to WhatsApp and Telegram */}
+                <div className="pt-2 border-t border-slate-100">
+                  <div className="text-[10px] font-bold text-slate-500 mb-2">مشاركة مباشرة سريعة:</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <a
+                      href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`${shareExamModal.title}\n${shareExamModal.pdfUrl || shareExamModal.url || ''}`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="py-2.5 px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-700 font-bold text-xs flex items-center justify-center gap-2 transition-colors"
+                    >
+                      <MessageCircle className="w-4 h-4 text-emerald-600" />
+                      <span>واتساب (WhatsApp)</span>
+                    </a>
+
+                    <a
+                      href={`https://t.me/share/url?url=${encodeURIComponent(shareExamModal.pdfUrl || shareExamModal.url || '')}&text=${encodeURIComponent(shareExamModal.title)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="py-2.5 px-3 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-700 font-bold text-xs flex items-center justify-center gap-2 transition-colors"
+                    >
+                      <Send className="w-4 h-4 text-sky-600" />
+                      <span>تليجرام (Telegram)</span>
+                    </a>
+                  </div>
+                </div>
+
+                {/* Direct Link Input Box */}
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  <div className="text-[9px] font-bold text-slate-500 mb-1">الرابط المباشر للملف:</div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      dir="ltr"
+                      value={shareExamModal.pdfUrl || shareExamModal.url || shareExamModal.fileUrl || ""}
+                      className="flex-1 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-slate-700 truncate select-all focus:outline-hidden"
+                      onClick={(e) => (e.target as HTMLInputElement).select()}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = shareExamModal.pdfUrl || shareExamModal.url || shareExamModal.fileUrl || "";
+                        copyUrlToClipboard(url, shareExamModal.title);
+                      }}
+                      className="h-8 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold flex items-center gap-1 shrink-0 transition-colors cursor-pointer"
+                      title="نسخ الرابط"
+                    >
+                      {copiedUrl === (shareExamModal.pdfUrl || shareExamModal.url || shareExamModal.fileUrl) ? (
+                        <Check className="w-3.5 h-3.5" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                      <span>نسخ</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating Toast notification */}
+      <AnimatePresence>
+        {shareToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] px-4 py-2.5 bg-slate-900 text-white rounded-xl shadow-xl border border-slate-700 text-xs font-bold font-mohand flex items-center gap-2 max-w-sm text-center"
+            dir="rtl"
+          >
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{shareToast.message}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };
