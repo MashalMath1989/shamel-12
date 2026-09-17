@@ -330,33 +330,49 @@ export const ResourcePdfModal: React.FC<{
 export const LessonResourcesRow: React.FC<{
   resources: ResourceItem[];
   onOpenResource: (res: ResourceItem) => void;
+  onOpenLessonVideos?: () => void;
   lessonTitle?: string;
-}> = ({ resources, onOpenResource }) => {
+}> = ({ resources, onOpenResource, onOpenLessonVideos }) => {
   const validResources = (resources || []).filter(r => isValidResourceUrl(r?.url));
+  const videoResources = validResources.filter(r => (r?.type || '').toLowerCase() === 'video');
+  const otherResources = validResources.filter(r => (r?.type || '').toLowerCase() !== 'video');
+
   if (validResources.length === 0) return null;
 
   return (
     <div className="mt-2.5 pt-2.5 border-t border-slate-200/80 px-2 pb-1 font-mohand">
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <span className="text-[11px] font-black text-slate-600 ml-1 select-none shrink-0">
-          المصادر:
-        </span>
-        {validResources.map((res, idx) => {
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* زر حصص الشرح في نهاية بطاقة الدرس مكان كلمة المصادر (مع حذف كلمة المصادر) */}
+        {videoResources.length > 0 && onOpenLessonVideos && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenLessonVideos();
+            }}
+            className="h-6 px-2 rounded-md flex items-center gap-1.5 bg-gradient-to-r from-rose-600 to-red-600 text-white text-[11px] font-black shadow-xs hover:from-rose-700 hover:to-red-700 active:scale-95 transition-all border border-black font-mohand cursor-pointer group"
+            title="حصص الشرح"
+          >
+            <span className="w-3.5 h-3.5 rounded-full border border-white flex items-center justify-center shrink-0">
+              <Play className="w-2 h-2 fill-white text-white translate-x-[0.5px] group-hover:scale-110 transition-transform" />
+            </span>
+            <span className="whitespace-nowrap">حصص الشرح</span>
+          </button>
+        )}
+
+        {/* عرض المصادر غير الفيديو فقط (ملفات PDF أو صور) - تم حذف عناوين الفيديوهات لتعرض في صفحة حصص الشرح فقط */}
+        {otherResources.map((res, idx) => {
           const type = (res?.type || '').toLowerCase();
           const rawTitle = typeof res?.resourceTitle === 'string' ? res.resourceTitle.trim() : '';
           const title = rawTitle || (
-            type === 'video' ? 'شرح فيديو' :
             type === 'pdf' ? 'ملخص PDF' :
             type === 'image' ? 'صورة توضيحية' : 'مورد إضافي'
           );
 
-          let icon = <Video className="w-3.5 h-3.5 text-rose-600 shrink-0" />;
-          let badgeStyle = "bg-rose-50 hover:bg-rose-100/90 text-rose-900 border-rose-200";
+          let icon = <FileText className="w-3.5 h-3.5 text-blue-600 shrink-0" />;
+          let badgeStyle = "bg-blue-50 hover:bg-blue-100/90 text-blue-900 border-blue-200";
 
-          if (type === 'pdf') {
-            icon = <FileText className="w-3.5 h-3.5 text-blue-600 shrink-0" />;
-            badgeStyle = "bg-blue-50 hover:bg-blue-100/90 text-blue-900 border-blue-200";
-          } else if (type === 'image') {
+          if (type === 'image') {
             icon = <ImageIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />;
             badgeStyle = "bg-emerald-50 hover:bg-emerald-100/90 text-emerald-900 border-emerald-200";
           }
@@ -391,13 +407,9 @@ export const UnitResourcesRow: React.FC<{
   if (validResources.length === 0) return null;
 
   return (
-    <div className="mt-3 mx-2 mb-2 p-2.5 bg-blue-50/90 rounded-md border border-blue-200/80 font-mohand shadow-2xs">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <span className="text-[11px] font-black text-slate-700 select-none shrink-0">
-          مصادر الوحدة:
-        </span>
-        <div className="flex items-center gap-2 flex-wrap">
-          {validResources.map((res, idx) => {
+    <div className="mt-3 mx-2 mb-2 p-2 bg-blue-50/90 rounded-md border border-blue-200/80 font-mohand shadow-2xs">
+      <div className="flex items-center gap-2 flex-wrap">
+        {validResources.map((res, idx) => {
             const type = (res?.type || '').toLowerCase();
             const rawTitle = typeof res?.resourceTitle === 'string' ? res.resourceTitle.trim() : '';
             const title = rawTitle || (
@@ -433,9 +445,8 @@ export const UnitResourcesRow: React.FC<{
           })}
         </div>
       </div>
-    </div>
-  );
-};
+    );
+  };
 
 // --- Custom Hook to Fetch Structure Sources from Dynamic GitHub JSON ---
 

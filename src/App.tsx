@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronDown, ChevronLeft, ChevronRight, BookOpen, GraduationCap, ArrowRight, ArrowLeft, CheckCircle2, XCircle, Loader2, RefreshCcw, Clock, Lightbulb, X, Printer, FileText, AlertTriangle, Download, FileDown, Star, Share2, Flag, Trash2, Info, LogOut, Mail, Lock, User as UserIcon, LogIn, Menu, Check, History, Settings, Link, ExternalLink, Maximize2, Minimize2, Eye, Moon, Sun, ZoomIn, ZoomOut, Play, Copy, MessageCircle, Send } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, BookOpen, GraduationCap, ArrowRight, ArrowLeft, CheckCircle2, XCircle, Loader2, RefreshCcw, Clock, Lightbulb, X, Printer, FileText, AlertTriangle, Download, FileDown, Star, Share2, Flag, Trash2, Info, LogOut, Mail, Lock, User as UserIcon, LogIn, Menu, Check, History, Settings, Link, ExternalLink, Maximize2, Minimize2, Eye, Moon, Sun, ZoomIn, ZoomOut, Play, Copy, MessageCircle, Send, Facebook, Instagram } from 'lucide-react';
 import { auth, db, OperationType, handleFirestoreError } from './firebase';
 import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, User as FirebaseUser, GoogleAuthProvider, browserPopupRedirectResolver } from 'firebase/auth';
 import { doc, setDoc, getDoc, collection, query, where, getDocs, onSnapshot, addDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
@@ -11,6 +11,7 @@ import katex from 'katex';
 import renderMathInElement from 'katex/dist/contrib/auto-render';
 import 'katex/dist/katex.min.css';
 import { FoundationVideosScreen } from './components/FoundationVideosScreen';
+import { LessonVideosScreen } from './components/LessonVideosScreen';
 import { FastPdfViewer } from './components/FastPdfViewer';
 import { 
   ResourceVideoModal, 
@@ -1882,13 +1883,15 @@ const LessonItem = React.memo<{
   lesson: Lesson; 
   semesterId: number;
   unitId: number;
+  unitTitle?: string;
   onSelectTest: (num: number, url?: string, ids?: any) => void;
   onOpenResource?: (res: ResourceItem) => void;
+  onOpenLessonVideos?: (info: { lesson: Lesson; unitId: number; semesterId: number; unitTitle?: string; resources?: ResourceItem[] }) => void;
   lessonResources?: ResourceItem[];
   initialIsExpanded?: boolean;
   fullMarkExams: string[];
   examProgress: Record<string, any>;
-}>(({ lesson, semesterId, unitId, onSelectTest, onOpenResource, lessonResources = [], initialIsExpanded = false, fullMarkExams = [], examProgress = {} }) => {
+}>(({ lesson, semesterId, unitId, unitTitle, onSelectTest, onOpenResource, onOpenLessonVideos, lessonResources = [], initialIsExpanded = false, fullMarkExams = [], examProgress = {} }) => {
   const [isExpanded, setIsExpanded] = useState(initialIsExpanded);
   
   const isCompleted = React.useMemo(() => {
@@ -1923,30 +1926,31 @@ const LessonItem = React.memo<{
   return (
     <div className="p-1 pt-0">
       <div className={`bg-[#fdf8f4] rounded-md border border-slate-100 overflow-hidden shadow-sm relative transition-all ${isCompleted ? 'ring-1 ring-green-500/50' : ''}`}>
-        <div className="flex items-center">
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="flex-1 flex items-center justify-between p-2 hover:bg-[#f3e6d8] transition-colors text-right"
-          >
-            <div className="flex items-center gap-3">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border transition-colors ${isCompleted ? 'bg-green-500 text-white border-green-600' : 'bg-blue-100 text-blue-600 border-blue-200'}`}>
-                {isCompleted ? <CheckCircle2 className="w-5 h-5" /> : lesson.id}
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h4 className={`font-bold text-sm md:text-base leading-tight ${isCompleted ? 'text-green-700' : 'text-slate-800'}`}>{lesson.title}</h4>
-                  <Check className={`w-3.5 h-3.5 md:w-4 md:h-4 transition-colors ${isCompleted ? 'text-green-600' : 'text-slate-200'}`} />
-                </div>
-                <span className="text-[10px] md:text-xs text-slate-500">صفحة {lesson.page} {isCompleted && ' . مكتمل'}</span>
-              </div>
+        <div 
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex items-center justify-between p-2 hover:bg-[#f3e6d8] transition-colors text-right cursor-pointer"
+        >
+          <div className="flex-1 flex items-center gap-3 min-w-0">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border transition-colors shrink-0 ${isCompleted ? 'bg-green-500 text-white border-green-600' : 'bg-blue-100 text-blue-600 border-blue-200'}`}>
+              {isCompleted ? <CheckCircle2 className="w-5 h-5" /> : lesson.id}
             </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h4 className={`font-bold text-sm md:text-base leading-tight truncate ${isCompleted ? 'text-green-700' : 'text-slate-800'}`}>{lesson.title}</h4>
+                <Check className={`w-3.5 h-3.5 md:w-4 md:h-4 transition-colors shrink-0 ${isCompleted ? 'text-green-600' : 'text-slate-200'}`} />
+              </div>
+              <span className="text-[10px] md:text-xs text-slate-500">صفحة {lesson.page} {isCompleted && ' . مكتمل'}</span>
+            </div>
+          </div>
+
+          <div className="mr-2 p-0.5 flex items-center justify-center shrink-0">
             <motion.div
               animate={{ rotate: isExpanded ? 180 : 0 }}
               transition={{ duration: 0.15 }}
             >
               <ChevronDown className="w-5 h-5 text-slate-400" />
             </motion.div>
-          </button>
+          </div>
         </div>
 
         <AnimatePresence>
@@ -1965,6 +1969,15 @@ const LessonItem = React.memo<{
                   lessonTitle={lesson.title} 
                   resources={lessonResources} 
                   onOpenResource={onOpenResource} 
+                  onOpenLessonVideos={onOpenLessonVideos ? () => {
+                    onOpenLessonVideos({
+                      lesson,
+                      unitId,
+                      semesterId,
+                      unitTitle,
+                      resources: lessonResources
+                    });
+                  } : undefined}
                 />
               )}
             </>
@@ -1980,11 +1993,12 @@ const UnitItem = React.memo<{
   semesterId: number;
   onSelectTest: (num: number, url?: string, ids?: any) => void;
   onOpenResource?: (res: ResourceItem) => void;
+  onOpenLessonVideos?: (info: { lesson: Lesson; unitId: number; semesterId: number; unitTitle?: string; resources?: ResourceItem[] }) => void;
   initialIsExpanded?: boolean;
   initialExpandedLessonId?: number;
   fullMarkExams: string[];
   examProgress: Record<string, any>;
-}>(({ unit, semesterId, onSelectTest, onOpenResource, initialIsExpanded = false, initialExpandedLessonId, fullMarkExams = [], examProgress = {} }) => {
+}>(({ unit, semesterId, onSelectTest, onOpenResource, onOpenLessonVideos, initialIsExpanded = false, initialExpandedLessonId, fullMarkExams = [], examProgress = {} }) => {
   const [isExpanded, setIsExpanded] = useState(initialIsExpanded);
   const { getUnitResources, getLessonResources } = useSemesterSources(semesterId);
   const unitResources = getUnitResources(unit.id, unit.title);
@@ -2055,8 +2069,10 @@ const UnitItem = React.memo<{
                   lesson={lesson} 
                   semesterId={semesterId}
                   unitId={unit.id}
+                  unitTitle={unit.title}
                   onSelectTest={(num, url, ids) => onSelectTest(num, url, { ...ids, unitId: unit.id })} 
                   onOpenResource={onOpenResource}
+                  onOpenLessonVideos={onOpenLessonVideos}
                   lessonResources={getLessonResources(unit.id, lesson.id, lesson.title, unit.title)}
                   initialIsExpanded={initialExpandedLessonId === lesson.id}
                   fullMarkExams={fullMarkExams}
@@ -2083,6 +2099,7 @@ interface SemesterCardProps {
   onSelectTest: (num: number, url?: string, ids?: any) => void;
   onOpenFavorites: (ids: number[], title: string) => void;
   onOpenFoundation?: () => void;
+  onOpenLessonVideos?: (info: { lesson: Lesson; unitId: number; semesterId: number; unitTitle?: string; resources?: ResourceItem[] }) => void;
   onOpenResource?: (res: ResourceItem) => void;
   initialIsExpanded?: boolean;
   initialExpandedUnitId?: number;
@@ -2091,7 +2108,7 @@ interface SemesterCardProps {
   examProgress: Record<string, any>;
 }
 
-const SemesterCard = React.memo<SemesterCardProps>(({ semester, onSelectTest, onOpenFavorites, onOpenFoundation, onOpenResource, initialIsExpanded = false, initialExpandedUnitId, initialExpandedLessonId, fullMarkExams = [], examProgress = {} }) => {
+const SemesterCard = React.memo<SemesterCardProps>(({ semester, onSelectTest, onOpenFavorites, onOpenFoundation, onOpenLessonVideos, onOpenResource, initialIsExpanded = false, initialExpandedUnitId, initialExpandedLessonId, fullMarkExams = [], examProgress = {} }) => {
   const [isExpanded, setIsExpanded] = useState(initialIsExpanded);
   const [hasFavorites, setHasFavorites] = useState(false);
   const user = auth.currentUser;
@@ -2163,10 +2180,12 @@ const SemesterCard = React.memo<SemesterCardProps>(({ semester, onSelectTest, on
             e.stopPropagation();
             onOpenFoundation();
           }}
-          className="absolute top-1 left-1/2 -translate-x-1/2 z-10 h-6 px-2.5 rounded-md flex items-center gap-1.5 bg-gradient-to-r from-rose-600 to-red-600 text-white text-[11px] font-black shadow-xs hover:from-rose-700 hover:to-red-700 active:scale-95 transition-all border border-black font-mohand cursor-pointer group"
+          className="absolute top-1 left-1/2 -translate-x-1/2 z-10 h-6 px-2 rounded-md flex items-center gap-1.5 bg-gradient-to-r from-rose-600 to-red-600 text-white text-[11px] font-black shadow-xs hover:from-rose-700 hover:to-red-700 active:scale-95 transition-all border border-black font-mohand cursor-pointer group"
           title="حصص التأسيس"
         >
-          <Play className="w-2.5 h-2.5 fill-white text-white shrink-0 group-hover:scale-110 transition-transform" />
+          <span className="w-3.5 h-3.5 rounded-full border border-white flex items-center justify-center shrink-0">
+            <Play className="w-2 h-2 fill-white text-white translate-x-[0.5px] group-hover:scale-110 transition-transform" />
+          </span>
           <span className="whitespace-nowrap">حصص التأسيس</span>
         </button>
       )}
@@ -2230,6 +2249,7 @@ const SemesterCard = React.memo<SemesterCardProps>(({ semester, onSelectTest, on
                   semesterId={semester.id}
                   onSelectTest={(num, url, ids) => onSelectTest(num, url, { ...ids, semesterId: semester.id })} 
                   onOpenResource={onOpenResource}
+                  onOpenLessonVideos={onOpenLessonVideos}
                   initialIsExpanded={initialExpandedUnitId === unit.id}
                   initialExpandedLessonId={initialExpandedUnitId === unit.id ? initialExpandedLessonId : undefined}
                   fullMarkExams={fullMarkExams}
@@ -5822,6 +5842,17 @@ export default function App() {
   const [showFoundationVideos, setShowFoundationVideos] = useState(() => {
     return localStorage.getItem('showFoundationVideos') === 'true';
   });
+  const [selectedLessonVideos, setSelectedLessonVideos] = useState<{
+    lessonId: number | string;
+    lessonTitle: string;
+    unitId: number | string;
+    unitTitle?: string;
+    semesterId: number;
+    resources?: ResourceItem[];
+  } | null>(() => {
+    const saved = localStorage.getItem('activeLessonVideos');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [activeResource, setActiveResource] = useState<ActiveResourceModalState | null>(null);
   const [showExamScheduleImage, setShowExamScheduleImage] = useState(() => {
     return localStorage.getItem('showExamScheduleImage') === 'true';
@@ -5857,6 +5888,7 @@ export default function App() {
     else if (showMinistryModels) currentScreen = 'models';
     else if (showLibrary) currentScreen = 'library';
     else if (showFoundationVideos) currentScreen = 'foundation';
+    else if (selectedLessonVideos) currentScreen = 'lesson-videos';
 
     try {
       window.history.pushState({ screen: currentScreen, resourceModal: true }, '');
@@ -5885,6 +5917,7 @@ export default function App() {
     setShowExamScheduleImage(false);
     setShowLibrary(false);
     setShowFoundationVideos(false);
+    setSelectedLessonVideos(null);
     setActiveResource(null);
     setBackRequested(0);
     localStorage.removeItem('activeTest');
@@ -5894,6 +5927,7 @@ export default function App() {
     localStorage.removeItem('showExamScheduleImage');
     localStorage.removeItem('showLibrary');
     localStorage.removeItem('showFoundationVideos');
+    localStorage.removeItem('activeLessonVideos');
     localStorage.removeItem('examProgress'); 
   };
 
@@ -5917,6 +5951,7 @@ export default function App() {
     else if (showMinistryModels) currentScreen = 'models';
     else if (showLibrary) currentScreen = 'library';
     else if (showFoundationVideos) currentScreen = 'foundation';
+    else if (selectedLessonVideos) currentScreen = 'lesson-videos';
 
     // If history state doesn't match current state, push a new state
     const historyState = window.history.state;
@@ -5936,7 +5971,7 @@ export default function App() {
 
       // Intercept exit from exam with higher priority
       const isInExam = selectedTest || selectedAdvExam;
-      if (isInExam && (targetScreen === 'home' || targetScreen === 'models' || targetScreen === 'favorites' || targetScreen === 'library' || targetScreen === 'foundation')) {
+      if (isInExam && (targetScreen === 'home' || targetScreen === 'models' || targetScreen === 'favorites' || targetScreen === 'library' || targetScreen === 'foundation' || targetScreen === 'lesson-videos')) {
         window.history.pushState({ screen: selectedTest ? 'exam' : 'adv-exam' }, '');
         setBackRequested(prev => prev + 1);
         return;
@@ -5960,6 +5995,7 @@ export default function App() {
         setShowAbout(false);
         setShowLibrary(false);
         setShowFoundationVideos(false);
+        setSelectedLessonVideos(null);
         setActiveResource(null);
         localStorage.removeItem('activeTest');
         localStorage.removeItem('activeAdvExam');
@@ -5968,6 +6004,7 @@ export default function App() {
         localStorage.removeItem('showExamScheduleImage');
         localStorage.removeItem('showLibrary');
         localStorage.removeItem('showFoundationVideos');
+        localStorage.removeItem('activeLessonVideos');
       } else if (targetScreen === 'models') {
         setShowMinistryModels(true);
         localStorage.setItem('showMinistryModels', 'true');
@@ -5983,6 +6020,8 @@ export default function App() {
         localStorage.removeItem('showLibrary');
         setShowFoundationVideos(false);
         localStorage.removeItem('showFoundationVideos');
+        setSelectedLessonVideos(null);
+        localStorage.removeItem('activeLessonVideos');
       } else if (targetScreen === 'library') {
         setShowLibrary(true);
         localStorage.setItem('showLibrary', 'true');
@@ -5998,6 +6037,8 @@ export default function App() {
         localStorage.removeItem('showExamScheduleImage');
         setShowFoundationVideos(false);
         localStorage.removeItem('showFoundationVideos');
+        setSelectedLessonVideos(null);
+        localStorage.removeItem('activeLessonVideos');
       } else if (targetScreen === 'foundation') {
         setShowFoundationVideos(true);
         localStorage.setItem('showFoundationVideos', 'true');
@@ -6013,12 +6054,35 @@ export default function App() {
         localStorage.removeItem('showExamScheduleImage');
         setShowLibrary(false);
         localStorage.removeItem('showLibrary');
+        setSelectedLessonVideos(null);
+        localStorage.removeItem('activeLessonVideos');
+      } else if (targetScreen === 'lesson-videos') {
+        const saved = localStorage.getItem('activeLessonVideos');
+        if (saved) {
+          try {
+            setSelectedLessonVideos(JSON.parse(saved));
+          } catch (e) {}
+        }
+        setSelectedTest(null);
+        localStorage.removeItem('activeTest');
+        setSelectedAdvExam(null);
+        localStorage.removeItem('activeAdvExam');
+        setShowMinistryModels(false);
+        localStorage.removeItem('showMinistryModels');
+        setShowFavorites(null);
+        localStorage.removeItem('showFavorites');
+        setShowExamScheduleImage(false);
+        localStorage.removeItem('showExamScheduleImage');
+        setShowLibrary(false);
+        localStorage.removeItem('showLibrary');
+        setShowFoundationVideos(false);
+        localStorage.removeItem('showFoundationVideos');
       }
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [selectedTest, selectedAdvExam, showMinistryModels, showFavorites, showExitConfirm, showExamScheduleImage, showLibrary, showFoundationVideos, activeResource]);
+  }, [selectedTest, selectedAdvExam, showMinistryModels, showFavorites, showExitConfirm, showExamScheduleImage, showLibrary, showFoundationVideos, selectedLessonVideos, activeResource]);
 
   const handleSelectAdvExam = (id: number, isRandom: boolean = false) => {
     setSelectedTest(null);
@@ -6076,6 +6140,16 @@ export default function App() {
       localStorage.removeItem('showFoundationVideos');
     }
   }, [showFoundationVideos]);
+
+  useEffect(() => {
+    if (selectedLessonVideos) {
+      try {
+        localStorage.setItem('activeLessonVideos', JSON.stringify(selectedLessonVideos));
+      } catch (e) {}
+    } else {
+      localStorage.removeItem('activeLessonVideos');
+    }
+  }, [selectedLessonVideos]);
 
   useEffect(() => {
     if (showFavorites) {
@@ -6151,6 +6225,23 @@ export default function App() {
               }
             }}
           />
+        ) : selectedLessonVideos ? (
+          <LessonVideosScreen 
+            key={`lesson-videos-${selectedLessonVideos.semesterId}-${selectedLessonVideos.unitId}-${selectedLessonVideos.lessonId}`}
+            lessonId={selectedLessonVideos.lessonId}
+            lessonTitle={selectedLessonVideos.lessonTitle}
+            unitId={selectedLessonVideos.unitId}
+            unitTitle={selectedLessonVideos.unitTitle}
+            semesterId={selectedLessonVideos.semesterId}
+            initialResources={selectedLessonVideos.resources}
+            onBack={() => {
+              setSelectedLessonVideos(null);
+              localStorage.removeItem('activeLessonVideos');
+              if (window.history.state?.screen === 'lesson-videos') {
+                window.history.back();
+              }
+            }}
+          />
         ) : showMinistryModels ? (
           <MinistryModelsScreen 
             key="models"
@@ -6210,14 +6301,50 @@ export default function App() {
                       exit={{ opacity: 0, scale: 0.95, y: -10 }}
                       className="absolute top-12 right-0 w-48 bg-white border-2 border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden"
                     >
+                      {/* Contact Us - Facebook Messenger */}
+                      <a
+                        id="contact-messenger-link"
+                        href="https://m.me/Shamel12.2009"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setIsMenuOpen(false)}
+                        className="w-full px-4 py-3 flex items-center gap-3 text-slate-800 hover:text-blue-600 font-black hover:bg-blue-50/70 transition-colors border-b border-slate-200 cursor-pointer"
+                        title="تواصل معنا عبر مسنجر فيسبوك"
+                      >
+                        {/* Facebook Messenger Official Icon */}
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="w-5 h-5 shrink-0 shadow-xs"
+                          aria-hidden="true"
+                        >
+                          <defs>
+                            <linearGradient id="messengerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                              <stop offset="0%" stopColor="#00B2FE" />
+                              <stop offset="50%" stopColor="#006AFF" />
+                              <stop offset="100%" stopColor="#0084FF" />
+                            </linearGradient>
+                          </defs>
+                          <path
+                            fill="url(#messengerGradient)"
+                            d="M12 2C6.477 2 2 6.145 2 11.259c0 2.913 1.454 5.512 3.726 7.164V22l3.434-1.89c.905.252 1.865.389 2.84.389 5.523 0 10-4.145 10-9.26C22 6.145 17.523 2 12 2z"
+                          />
+                          <path
+                            fill="#FFFFFF"
+                            d="M13.085 14.434l-2.73-2.914-5.324 2.914 5.857-6.218 2.793 2.914 5.261-2.914-5.857 6.218z"
+                          />
+                        </svg>
+                        <span>تواصل معنا</span>
+                      </a>
+
                       <button 
+                        id="logout-button"
                         onClick={() => {
                           setIsMenuOpen(false);
                           signOut(auth);
                         }}
-                        className="w-full px-4 py-3 flex items-center gap-3 text-red-600 font-black hover:bg-red-50 transition-colors"
+                        className="w-full px-4 py-3 flex items-center gap-3 text-red-600 font-black hover:bg-red-50 transition-colors cursor-pointer"
                       >
-                        <LogOut className="w-5 h-5" />
+                        <LogOut className="w-5 h-5 shrink-0" />
                         <span>تسجيل الخروج</span>
                       </button>
                     </motion.div>
@@ -6341,6 +6468,30 @@ export default function App() {
                       window.history.pushState({ screen: 'foundation' }, '');
                     }
                   }}
+                  onOpenLessonVideos={(info) => {
+                    setSelectedTest(null);
+                    setSelectedAdvExam(null);
+                    setShowMinistryModels(false);
+                    setShowFavorites(null);
+                    setShowLibrary(false);
+                    setShowFoundationVideos(false);
+                    const data = {
+                      lessonId: info.lesson.id,
+                      lessonTitle: info.lesson.title,
+                      unitId: info.unitId,
+                      unitTitle: info.unitTitle,
+                      semesterId: info.semesterId,
+                      resources: info.resources
+                    };
+                    setSelectedLessonVideos(data);
+                    try {
+                      localStorage.setItem('activeLessonVideos', JSON.stringify(data));
+                    } catch (e) {}
+                    const historyState = window.history.state;
+                    if (!historyState || historyState.screen !== 'lesson-videos') {
+                      window.history.pushState({ screen: 'lesson-videos' }, '');
+                    }
+                  }}
                   onOpenResource={(res) => {
                     setActiveResource({
                       type: res.type,
@@ -6394,8 +6545,32 @@ export default function App() {
               </motion.div>
             </main>
 
-            <footer className="mt-4 text-center text-slate-400 text-[10px]">
-              <p>© 2026 منصة الشامل في الرياضيات</p>
+            <footer className="mt-6 mb-2 flex flex-col items-center justify-center gap-2.5 text-center">
+              <div className="flex items-center gap-3">
+                <a
+                  id="main-footer-facebook-btn"
+                  href="https://www.facebook.com/share/1Ub23LoKWM/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-10 h-10 rounded-full bg-[#1877F2] text-white flex items-center justify-center shadow-xs hover:bg-[#166fe5] hover:scale-110 active:scale-95 transition-all border border-black cursor-pointer group"
+                  title="تابعنا على فيسبوك"
+                  aria-label="صفحتنا على فيسبوك"
+                >
+                  <Facebook className="w-5 h-5 fill-white text-white group-hover:scale-105 transition-transform" />
+                </a>
+                <a
+                  id="main-footer-instagram-btn"
+                  href="https://www.instagram.com/shamel2009_math?stkn=eXc3dG5mdHp2d2dr"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-10 h-10 rounded-full bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888] text-white flex items-center justify-center shadow-xs hover:brightness-110 hover:scale-110 active:scale-95 transition-all border border-black cursor-pointer group"
+                  title="تابعنا على انستغرام"
+                  aria-label="حسابنا على انستغرام"
+                >
+                  <Instagram className="w-5 h-5 text-white stroke-[2.2] group-hover:scale-105 transition-transform" />
+                </a>
+              </div>
+              <p className="text-slate-600 font-bold text-[11px]">© 2026 منصة الشامل في الرياضيات</p>
             </footer>
           </motion.div>
         )}

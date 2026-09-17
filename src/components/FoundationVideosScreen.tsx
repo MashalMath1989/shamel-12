@@ -218,7 +218,7 @@ export const FoundationVideosScreen: React.FC<{
   const validVideos = videos.filter(v => isValidResourceUrl(v.url));
 
   return (
-    <div className="min-h-screen bg-slate-50 py-4 px-3 sm:py-6 sm:px-4 font-mohand select-none text-slate-900" dir="rtl">
+    <div className="min-h-screen bg-[#e8d5c4] py-4 px-3 sm:py-6 sm:px-4 font-mohand select-none text-slate-900" dir="rtl">
       <div className="max-w-xl mx-auto space-y-3.5">
         
         {/* Top Header Card Matching the Design */}
@@ -281,10 +281,10 @@ export const FoundationVideosScreen: React.FC<{
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.03 }}
                 onClick={() => handleCardClick(vid)}
-                className="bg-white rounded-2xl border-2 border-black shadow-[4px_4px_0px_#000] p-3 sm:p-3.5 flex items-center justify-between gap-3.5 transition-all group hover:translate-x-[-2px] hover:translate-y-[-2px] active:translate-x-0 active:translate-y-0 active:shadow-[1px_1px_0px_#000] cursor-pointer"
+                className="bg-white rounded-2xl border border-black shadow-[2px_2px_0px_#000] hover:shadow-[3px_3px_0px_#000] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-0 active:translate-y-0 active:shadow-[1px_1px_0px_#000] p-3 sm:p-3.5 flex items-center justify-between gap-3.5 transition-all group cursor-pointer"
               >
                 {/* 1. Video Thumbnail (First child -> On the RIGHT in RTL) */}
-                <div className="w-32 h-20 sm:w-40 sm:h-24 shrink-0 rounded-xl overflow-hidden border-2 border-black relative bg-slate-900 shadow-2xs">
+                <div className="w-32 h-20 sm:w-40 sm:h-24 shrink-0 rounded-xl overflow-hidden border border-black relative bg-slate-900 shadow-2xs">
                   {thumbUrl ? (
                     <img 
                       src={thumbUrl} 
