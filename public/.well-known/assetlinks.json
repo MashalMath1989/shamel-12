@@ -1,1 +1,12 @@
-
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.netlify.shamel12.twa",
+      "sha256_cert_fingerprints": [
+        "71:13:C0:6A:88:0B:06:30:96:65:FC:67:B1:A9:46:5A:DA:21:5E:D9:E8:5F:45:40:17:10:08:B7:5D:D0:25:EC"
+      ]
+    }
+  }
+]
