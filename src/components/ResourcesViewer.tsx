@@ -282,6 +282,7 @@ export const ResourcePdfModal: React.FC<{
             <div className="flex items-center gap-2 shrink-0">
               <a
                 href={resource.url}
+                download
                 target="_blank"
                 rel="noopener noreferrer"
                 className="h-8 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1.5 transition-colors border border-blue-500 text-xs font-bold"
@@ -295,10 +296,10 @@ export const ResourcePdfModal: React.FC<{
                 target="_blank"
                 rel="noopener noreferrer"
                 className="h-8 px-2.5 sm:px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center gap-1.5 transition-colors border border-slate-700 text-xs font-bold"
-                title="فتح في المتصفح (عرض مباشر بدون تنزيل)"
+                title="فتح في متصفح جوجل (عرض مباشر بدون تنزيل)"
               >
                 <ExternalLink className="w-3.5 h-3.5 text-blue-400" />
-                <span className="hidden sm:inline">فتح في المتصفح</span>
+                <span className="hidden sm:inline">متصفح جوجل</span>
               </a>
               <button
                 type="button"

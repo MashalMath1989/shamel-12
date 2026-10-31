@@ -61,6 +61,9 @@ interface Semester {
   units: Unit[];
 }
 
+// ضبط ظهور بطاقة موعد امتحان الوزارة في الصفحة الرئيسية (مخفية مؤقتاً - وعند طلب إعادتها لاحقاً تُضبط على true لتعود بنفس الموعد والتنسيق والموقع تماماً)
+const SHOW_MINISTRY_EXAM_DATE_CARD = false;
+
 const ExamCountdown = () => {
   const [timeLeft, setTimeLeft] = useState(() => {
     const targetDate = new Date('2027-07-01T10:00:00').getTime();
@@ -738,7 +741,7 @@ const ACADEMIC_DATA: Semester[] = [
   {
     id: 1,
     title: "الفصل الدراسي الأول",
-    imageUrl: "https://raw.githubusercontent.com/MashalMath/Pdf_Library/main/Math12_S1_Cover.png",
+    imageUrl: "https://raw.githubusercontent.com/MashalMath/Pdf_Library/main/Shamel12_S1_NewCover.jpg",
     units: [
       {
         id: 1,
@@ -955,7 +958,7 @@ const ACADEMIC_DATA: Semester[] = [
   {
     id: 2,
     title: "الفصل الدراسي الثاني",
-    imageUrl: "https://raw.githubusercontent.com/MashalMath/Pdf_Library/main/Math12_S2_Cover.png",
+    imageUrl: "https://raw.githubusercontent.com/MashalMath/Pdf_Library/main/Shamel12_S2_NewCover.jpg",
     units: [
       {
         id: 5,
@@ -1135,10 +1138,31 @@ const ACADEMIC_DATA: Semester[] = [
 
 // --- Constants ---
 const EXAM_CACHE: Record<string, Question[]> = {};
+const ADV_EXAM_CACHE: Record<string, Question[]> = {};
 const PREFETCH_STATUS: Record<string, 'pending' | 'completed' | 'failed'> = {};
 
 // --- Helpers ---
-const fetchWithFallback = async (originUrl: string): Promise<Response> => {
+const fetchWithFallback = async (originUrl: string, forceRefresh: boolean = false): Promise<Response> => {
+  // If forceRefresh is requested, add cache-busting timestamp parameter to bypass browser and CDN caches
+  const addCacheBuster = (rawUrl: string): string => {
+    if (!forceRefresh) return rawUrl;
+    const separator = rawUrl.includes('?') ? '&' : '?';
+    return `${rawUrl}${separator}_cb=${Date.now()}`;
+  };
+
+  const fetchOptions: RequestInit = forceRefresh
+    ? {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
+    : {
+        cache: 'default',
+      };
+
   if (originUrl.startsWith("https://raw.githubusercontent.com/")) {
     const jsdelivrUrl = originUrl
       .replace("https://raw.githubusercontent.com/", "https://cdn.jsdelivr.net/gh/")
@@ -1151,11 +1175,18 @@ const fetchWithFallback = async (originUrl: string): Promise<Response> => {
       "https://rawcdn.githack.com/"
     );
 
-    const urls = [originUrl, jsdelivrUrl, githackUrl];
+    // Prioritize direct GitHub Raw with cache-buster for latest edits
+    const urls = [
+      addCacheBuster(originUrl),
+      addCacheBuster(githackUrl),
+      addCacheBuster(jsdelivrUrl),
+      originUrl,
+    ];
+
     let lastError: any = null;
     for (const url of urls) {
       try {
-        const response = await fetch(url);
+        const response = await fetch(url, fetchOptions);
         if (response.ok) {
           return response;
         }
@@ -1167,14 +1198,17 @@ const fetchWithFallback = async (originUrl: string): Promise<Response> => {
     throw lastError || new Error("Failed to fetch from all available mirrors");
   }
 
-  return fetch(originUrl);
+  return fetch(addCacheBuster(originUrl), fetchOptions);
 };
 
-const fetchAndCacheExam = async (url: string): Promise<Question[]> => {
-  if (EXAM_CACHE[url]) return EXAM_CACHE[url];
+const fetchAndCacheExam = async (url: string, forceRefresh: boolean = false): Promise<Question[]> => {
+  // If not forcing refresh and questions are already cached in memory, return them
+  if (!forceRefresh && EXAM_CACHE[url] && EXAM_CACHE[url].length > 0) {
+    return EXAM_CACHE[url];
+  }
   
   try {
-    const res = await fetchWithFallback(url);
+    const res = await fetchWithFallback(url, forceRefresh);
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
     const text = await res.text();
     
@@ -1268,6 +1302,12 @@ const fetchAndCacheExam = async (url: string): Promise<Question[]> => {
     EXAM_CACHE[url] = normalizedQuestions;
     return normalizedQuestions;
   } catch (e) {
+    // If online fetch failed (e.g. offline) but we already have cached questions, preserve and return them
+    if (EXAM_CACHE[url] && EXAM_CACHE[url].length > 0) {
+      console.warn(`Online fetch for latest exam failed for url ${url}. Reusing cached questions:`, e);
+      return EXAM_CACHE[url];
+    }
+
     console.warn(`Fetch/Cache failed for url ${url}. Activating elegant in-memory Arabic math exam questions generator fallback:`, e);
 
     // Hash function to make questions deterministic per URL so the user gets identical sets when they reload
@@ -2308,6 +2348,14 @@ const MinistryModelsScreen: React.FC<{
         >
           <ArrowRight className="w-5 h-5" />
         </button>
+        <div className="w-8 h-8 rounded-lg bg-white border border-black flex items-center justify-center overflow-hidden p-0.5 shadow-2xs">
+          <img 
+            src="https://raw.githubusercontent.com/MashalMath/Pdf_Library/main/Shamel12_JordanFlag.png" 
+            alt="نماذج وزارة متوقعة" 
+            className="w-full h-full object-contain" 
+            referrerPolicy="no-referrer" 
+          />
+        </div>
         <h1 className="text-lg font-black text-slate-900">نماذج وزارة متوقعة</h1>
       </header>
 
@@ -2848,6 +2896,7 @@ const LibraryScreen: React.FC<{
                   {/* Dynamic click link or direct files load */}
                   <a
                     href={exam.pdfUrl || exam.url}
+                    download
                     target="_blank"
                     rel="noopener noreferrer"
                     className={`w-9 h-9 rounded-lg border flex items-center justify-center transition-all shrink-0 shadow-xs hover:scale-105 active:scale-95 ${
@@ -3205,10 +3254,13 @@ const AdvancedExamScreen: React.FC<{
   clearExamProgress?: (key: string) => void;
   onSaveFullMark?: (key: string) => void;
 }> = ({ examId, isRandom, onBack, backRequested, examProgress = {}, updateExamProgress, clearExamProgress, onSaveFullMark }) => {
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([]);
   const examKey = `ADV_MODEL_${examId}`;
+  const [questions, setQuestions] = useState<Question[]>(() => {
+    return (!isRandom && ADV_EXAM_CACHE[examKey] && ADV_EXAM_CACHE[examKey].length > 0)
+      ? ADV_EXAM_CACHE[examKey]
+      : [];
+  });
   const remoteProgress = !isRandom ? examProgress[examKey] : null;
   
   const getInitialProgress = () => {
@@ -3379,69 +3431,68 @@ const AdvancedExamScreen: React.FC<{
 
   const fetchQuestions = async () => {
     try {
-      setLoading(true);
       setError(null);
 
       // Handle Model 11 (Ministry) as a special case with a specific URL
       if (examId === 11 && !isRandom) {
         const ministryUrl = "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/MATH_Expect11.json";
-        const fetchedQuestions = await fetchAndCacheExam(ministryUrl);
+        const fetchedQuestions = await fetchAndCacheExam(ministryUrl, true);
+        ADV_EXAM_CACHE[examKey] = fetchedQuestions;
         setQuestions(fetchedQuestions);
-        setLoading(false);
         return;
       }
 
       // Handle Model 12 (Ministry) as a special case with a specific URL
       if (examId === 12 && !isRandom) {
         const ministryUrl = "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/MATH_Expect12.json";
-        const fetchedQuestions = await fetchAndCacheExam(ministryUrl);
+        const fetchedQuestions = await fetchAndCacheExam(ministryUrl, true);
+        ADV_EXAM_CACHE[examKey] = fetchedQuestions;
         setQuestions(fetchedQuestions);
-        setLoading(false);
         return;
       }
 
       // Handle Model 13 (Ministry) as a special case with a specific URL
       if (examId === 13 && !isRandom) {
         const ministryUrl = "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/MATH_Expect13.json";
-        const fetchedQuestions = await fetchAndCacheExam(ministryUrl);
+        const fetchedQuestions = await fetchAndCacheExam(ministryUrl, true);
+        ADV_EXAM_CACHE[examKey] = fetchedQuestions;
         setQuestions(fetchedQuestions);
-        setLoading(false);
         return;
       }
 
       // Handle Model 14 (Ministry) as a special case with a specific URL
       if (examId === 14 && !isRandom) {
         const ministryUrl = "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/MATH_Expect14.json";
-        const fetchedQuestions = await fetchAndCacheExam(ministryUrl);
+        const fetchedQuestions = await fetchAndCacheExam(ministryUrl, true);
+        ADV_EXAM_CACHE[examKey] = fetchedQuestions;
         setQuestions(fetchedQuestions);
-        setLoading(false);
         return;
       }
 
       // Handle Model 15 (Ministry) as a special case with a specific URL
       if (examId === 15 && !isRandom) {
         const ministryUrl = "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/MATH_Expext15.json";
-        const fetchedQuestions = await fetchAndCacheExam(ministryUrl);
+        const fetchedQuestions = await fetchAndCacheExam(ministryUrl, true);
+        ADV_EXAM_CACHE[examKey] = fetchedQuestions;
         setQuestions(fetchedQuestions);
-        setLoading(false);
         return;
       }
 
       // Handle Model 16 (Ministry) as a special case with a specific URL
       if (examId === 16 && !isRandom) {
         const ministryUrl = "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/MATH_Expect16.json";
-        const fetchedQuestions = await fetchAndCacheExam(ministryUrl);
+        const fetchedQuestions = await fetchAndCacheExam(ministryUrl, true);
+        ADV_EXAM_CACHE[examKey] = fetchedQuestions;
         setQuestions(fetchedQuestions);
-        setLoading(false);
         return;
       }
 
       // Handle Model 17 (Ministry) as a special case with a specific URL
       if (examId === 17 && !isRandom) {
         const ministryUrl = "https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/MATH_Expect17.json";
-        const fetchedQuestions = await fetchAndCacheExam(ministryUrl);
+        const fetchedQuestions = await fetchAndCacheExam(ministryUrl, true);
+        ADV_EXAM_CACHE[examKey] = fetchedQuestions;
         setQuestions(fetchedQuestions);
-        setLoading(false);
         return;
       }
       
@@ -3500,7 +3551,7 @@ const AdvancedExamScreen: React.FC<{
         for (const examInfo of selectedExams) {
           if (countForUnit >= dist.count) break;
           try {
-            const questionsFromExam = await fetchAndCacheExam(examInfo.url);
+            const questionsFromExam = await fetchAndCacheExam(examInfo.url, true);
             const candidates = Array.isArray(questionsFromExam) ? questionsFromExam.slice(2) : [];
             for (const q of candidates) {
               if (countForUnit >= dist.count) break;
@@ -3517,11 +3568,14 @@ const AdvancedExamScreen: React.FC<{
         }
       }
 
+      if (!isRandom) {
+        ADV_EXAM_CACHE[examKey] = allFetchedQuestions;
+      }
       setQuestions(allFetchedQuestions);
-      setLoading(false);
     } catch (err) {
-      setError("حدث خطأ أثناء تحميل أسئلة الامتحان. يرجى المحاولة مرة أخرى.");
-      setLoading(false);
+      if (questions.length === 0) {
+        setError("حدث خطأ أثناء تحميل أسئلة الامتحان. يرجى المحاولة مرة أخرى.");
+      }
     }
   };
 
@@ -3530,7 +3584,7 @@ const AdvancedExamScreen: React.FC<{
   }, [examId, isRandom]);
 
   useEffect(() => {
-    if (currentStep === 'quiz' && !loading && timeLeft > 0) {
+    if (currentStep === 'quiz' && questions.length > 0 && timeLeft > 0) {
       const timer = setInterval(() => {
         setTimeLeft(prev => {
           if (prev <= 1) {
@@ -3544,7 +3598,7 @@ const AdvancedExamScreen: React.FC<{
       }, 1000);
       return () => clearInterval(timer);
     }
-  }, [currentStep, loading, timeLeft]);
+  }, [currentStep, questions.length, timeLeft]);
 
   const formatTime = (seconds: number) => {
     const hrs = Math.floor(seconds / 3600);
@@ -3553,21 +3607,12 @@ const AdvancedExamScreen: React.FC<{
     return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#e8d5c4] flex flex-col items-center justify-center p-6 text-center">
-        <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
-        <h2 className="text-xl font-bold text-slate-800">
-          {examId === 17 ? "جاري تحميل نموذج 17 (فصل ثاني)..." : examId === 16 ? "جاري تحميل نموذج التفاضل..." : examId === 15 ? "جاري تحميل النموذج الخامس عشر..." : examId === 14 ? "جاري تحميل نموذج المتجهات..." : examId === 13 ? "جاري تحميل النموذج التجريبي..." : (examId === 11 || examId === 12) ? "جاري تحميل النموذج الوزاري..." : "جاري موازنة الأسئلة وتحميل النموذج..."}
-        </h2>
-        <p className="text-slate-500 mt-2">
-          {examId === 17 ? "يرجى الانتظار، جاري تحميل أسئلة نموذج 17 (فصل ثاني)..." : examId === 16 ? "يرجى الانتظار، جاري تحميل أسئلة نموذج التفاضل..." : examId === 15 ? "يرجى الانتظار، جاري تحميل أسئلة النموذج الخامس عشر..." : examId === 14 ? "يرجى الانتظار، جاري تحميل أسئلة نموذج المتجهات..." : examId === 13 ? "يرجى الانتظار، جاري تحميل أسئلة النموذج التجريبي..." : (examId === 11 || examId === 12) ? "يرجى الانتظار، جاري تحميل أسئلة النموذج الوزاري..." : "يرجى الانتظار، جاري تجميع 50 سؤالاً من جميع الوحدات"}
-        </p>
-      </div>
-    );
+  const requiredCount = examId === 17 ? 30 : examId === 16 ? 57 : examId === 15 ? 20 : (examId === 11 || examId === 12 || examId === 13 || examId === 14) ? 30 : 50;
+  
+  if (!error && questions.length === 0) {
+    return <div className="min-h-screen bg-[#e8d5c4]" dir="rtl" />;
   }
 
-  const requiredCount = examId === 17 ? 30 : examId === 16 ? 57 : examId === 15 ? 20 : (examId === 11 || examId === 12 || examId === 13 || examId === 14) ? 30 : 50;
   if (error || questions.length < requiredCount) {
     return (
       <div className="min-h-screen bg-[#e8d5c4] flex flex-col items-center justify-center p-6 text-center">
@@ -3663,7 +3708,16 @@ const AdvancedExamScreen: React.FC<{
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <button
+                  onClick={fetchQuestions}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-white rounded-xl shadow-sm border border-slate-100 text-slate-600 hover:text-blue-600 hover:border-blue-200 transition-all font-bold text-xs"
+                  title="جلب آخر تحديث لملف الامتحان من الرابط"
+                >
+                  <RefreshCcw className="w-3.5 h-3.5 text-blue-600" />
+                  <span className="hidden sm:inline">جلب آخر تحديث</span>
+                </button>
+
                 <button
                   onClick={handleExportPDF}
                   disabled={isExportingPDF}
@@ -4322,10 +4376,18 @@ const ExamScreen: React.FC<{
   onBack: () => void; 
   backRequested?: number 
 }> = ({ testNum, testUrl, unitId, lessonId, semesterId, examProgress, updateExamProgress, clearExamProgress, onSaveFullMark, onBack, backRequested }) => {
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [examData, setExamData] = useState<ExamData | null>(null);
+  const [examData, setExamData] = useState<ExamData | null>(() => {
+    if (testUrl && EXAM_CACHE[testUrl] && EXAM_CACHE[testUrl].length > 0) {
+      return {
+        title: `اختبار رقم ${testNum}`,
+        questions: EXAM_CACHE[testUrl]
+      };
+    }
+    return null;
+  });
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const examKey = `S${semesterId}-U${unitId}-L${lessonId}-T${testNum}`;
   
@@ -4457,53 +4519,61 @@ const ExamScreen: React.FC<{
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  useEffect(() => {
-    let isMounted = true;
-    const controller = new AbortController();
+  const loadExamQuestions = async (force: boolean = true) => {
+    if (!testUrl) {
+      setError("رابط الامتحان غير متوفر لهذا الدرس.");
+      return;
+    }
 
-    if (testUrl) {
-      // Check cache first
-      if (EXAM_CACHE[testUrl]) {
-        setExamData({ 
-          title: `اختبار رقم ${testNum}`,
-          questions: EXAM_CACHE[testUrl] 
-        });
-        setLoading(false);
-        return;
+    try {
+      // Always fetch the freshest update of the exam file directly from the link with cache busting
+      const questions = await fetchAndCacheExam(testUrl, force);
+      if (!questions || questions.length === 0) {
+        throw new Error('الامتحان لا يحتوي على أسئلة حالياً');
       }
 
-      setLoading(true);
+      setExamData({ 
+        title: `اختبار رقم ${testNum}`,
+        questions: questions 
+      });
       setError(null);
-      
-      fetchAndCacheExam(testUrl)
-        .then(questions => {
-          if (!isMounted) return;
-          
-          if (questions.length === 0) {
-            throw new Error('الامتحان لا يحتوي على أسئلة حالياً');
-          }
-
-          setExamData({ 
-            title: `اختبار رقم ${testNum}`,
-            questions: questions 
-          });
-          setLoading(false);
-        })
-        .catch(err => {
-          if (err.name === 'AbortError') return;
-          if (!isMounted) return;
+    } catch (err: any) {
+      if (err.name === 'AbortError') return;
+      setExamData(prev => {
+        if (!prev) {
           setError(err.message || 'حدث خطأ غير متوقع أثناء تحميل البيانات');
-          setLoading(false);
-        });
-    } else {
-      setError("رابط الامتحان غير متوفر لهذا الدرس.");
+        }
+        return prev;
+      });
     }
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+    loadExamQuestions(true);
 
     return () => {
       isMounted = false;
-      controller.abort();
     };
   }, [testUrl, testNum]);
+
+  const handleManualRefresh = async () => {
+    if (!testUrl || isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      const freshQuestions = await fetchAndCacheExam(testUrl, true);
+      if (freshQuestions && freshQuestions.length > 0) {
+        setExamData({ 
+          title: `اختبار رقم ${testNum}`,
+          questions: freshQuestions 
+        });
+      }
+    } catch (e) {
+      console.warn("Could not refresh exam questions:", e);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const handleAnswer = (index: number) => {
     if (userAnswers[currentQuestionIndex] !== undefined) return;
@@ -4559,12 +4629,15 @@ const ExamScreen: React.FC<{
     }
   };
 
-  const handleRestart = () => {
+  const handleRestart = async () => {
     setCurrentQuestionIndex(0);
     setUserAnswers({});
     setScore(0);
     setCurrentStep('quiz');
     setTimeLeft(36 * 60);
+    if (testUrl) {
+      await loadExamQuestions(true);
+    }
   };
 
   const handlePrint = () => {
@@ -4650,16 +4723,11 @@ const ExamScreen: React.FC<{
     }, 4500); // 4.5 seconds to ensure all MathText is processed
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#e8d5c4] flex flex-col items-center justify-center p-6 text-center">
-        <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
-        <p className="text-slate-500 font-medium">جاري تحميل الأسئلة...</p>
-      </div>
-    );
+  if (!examData && !error) {
+    return <div className="min-h-screen bg-[#e8d5c4]" dir="rtl" />;
   }
 
-  if (error || (!testUrl && !loading)) {
+  if (error || (!testUrl && !examData)) {
     return (
       <div className="min-h-screen bg-[#e8d5c4] p-6 flex flex-col items-center justify-center text-center">
         <div className="bg-white p-8 rounded-xl shadow-sm border border-black max-w-sm w-full">
@@ -4684,7 +4752,7 @@ const ExamScreen: React.FC<{
   const optionLetters = ['a', 'b', 'c', 'd', 'e', 'f'];
 
   return (
-    <div className="min-h-screen bg-[#e8d5c4] p-4 md:p-8 flex flex-col items-center justify-start print:bg-white print:p-0" dir="rtl">
+    <div className="min-h-screen bg-[#e8d5c4] p-4 md:p-8 flex flex-col items-center justify-start print:bg-white print:p-0 relative" dir="rtl">
       <AnimatePresence mode="popLayout">
         {currentStep === 'quiz' && currentQuestion && (
           <motion.div
@@ -4760,7 +4828,16 @@ const ExamScreen: React.FC<{
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 sm:gap-4">
+                <button
+                  onClick={handleManualRefresh}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-white rounded-xl shadow-sm border border-slate-100 text-slate-600 hover:text-blue-600 hover:border-blue-200 transition-all font-bold text-xs"
+                  title="جلب آخر تحديث لملف الامتحان من الرابط"
+                >
+                  <RefreshCcw className="w-3.5 h-3.5 text-blue-600" />
+                  <span className="hidden sm:inline">جلب آخر تحديث</span>
+                </button>
+
                 <button
                   onClick={handleExportPDF}
                   disabled={isExportingPDF}
@@ -5562,41 +5639,89 @@ const ExitConfirmModal: React.FC<{ isOpen: boolean; onCancel: () => void; onConf
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs select-none" dir="rtl">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onCancel}
+            className="absolute inset-0"
+          />
           <motion.div 
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
-            className="bg-white rounded-lg w-full max-w-sm overflow-hidden shadow-2xl border border-black"
-            dir="rtl"
+            className="relative bg-white rounded-3xl w-full max-w-sm overflow-hidden border-2 border-black shadow-[4px_4px_0px_#000] font-mohand p-6 text-center z-10"
           >
-            <div className="p-8 text-center">
-              <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                <XCircle className="w-10 h-10 text-red-500" />
-              </div>
-              <h3 className="text-2xl font-black text-slate-900 mb-3">هل تريد الخروج؟</h3>
-              <p className="text-slate-500 font-bold leading-relaxed mb-8">سيتم إغلاق التطبيق والعودة للصفحة السابقة في المتصفح.</p>
-              
-              <div className="flex flex-col gap-3">
-                <button 
-                  onClick={onConfirm}
-                  className="w-full py-4 bg-red-500 text-white rounded-lg font-black text-base shadow-lg shadow-red-200 hover:bg-red-600 transition-all flex items-center justify-center gap-2"
-                >
-                  نعم، أريد الخروج
-                </button>
-                <button 
-                  onClick={onCancel}
-                  className="w-full py-4 bg-slate-100 text-slate-600 rounded-lg font-black text-base hover:bg-slate-200 transition-all"
-                >
-                  إلغاء، سأبقى هنا
-                </button>
-              </div>
+            <div className="w-16 h-16 bg-rose-50 border border-rose-200 rounded-2xl flex items-center justify-center mx-auto mb-4 text-[#ef233c] shadow-xs">
+              <LogOut className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-black text-slate-900 mb-2">تأكيد الخروج من التطبيق</h3>
+            <p className="text-slate-600 text-sm font-bold leading-relaxed mb-6">
+              هل أنت متأكد من رغبتك في إغلاق التطبيق والخروج؟
+            </p>
+            
+            <div className="flex flex-col gap-2.5">
+              <button 
+                type="button"
+                id="exit-confirm-btn"
+                onClick={onConfirm}
+                className="w-full py-3.5 px-4 bg-[#ef233c] hover:bg-rose-600 text-white rounded-xl font-black text-sm shadow-[2px_2px_0px_#000] border border-black hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-0 active:translate-y-0 active:shadow-none transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>تأكيد الخروج</span>
+              </button>
+              <button 
+                type="button"
+                id="exit-cancel-btn"
+                onClick={onCancel}
+                className="w-full py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-sm border border-black/20 hover:border-black/40 transition-all cursor-pointer"
+              >
+                إلغاء، البقاء في التطبيق
+              </button>
             </div>
           </motion.div>
         </div>
       )}
     </AnimatePresence>
+  );
+};
+
+const OfficialDisclaimerSection: React.FC<{ className?: string }> = ({ className = '' }) => {
+  return (
+    <div 
+      className={`rounded-xl border border-slate-300 bg-slate-50/95 p-3.5 sm:p-4 text-right font-mohand shadow-xs select-none ${className}`}
+      dir="rtl"
+    >
+      <div className="flex items-start gap-2.5">
+        <div className="w-6 h-6 rounded-md bg-amber-100 text-amber-800 border border-amber-300/70 flex items-center justify-center shrink-0 mt-0.5">
+          <Info className="w-3.5 h-3.5 text-amber-700" />
+        </div>
+        <div className="flex-1 space-y-2 text-xs sm:text-sm leading-relaxed">
+          <p className="text-slate-800 font-bold">
+            <span className="font-black text-slate-900">إخلاء مسؤولية: </span>
+            هذا تطبيق تعليمي مستقل، ولا يمثل وزارة التربية والتعليم الأردنية أو مركز تطوير المناهج أو أي جهة حكومية، ولا يتبع لها.
+          </p>
+          <p className="text-slate-800 font-bold">
+            <span className="font-black text-slate-900">المصادر الرسمية: </span>
+            المحتوى مبني على الكتب والمناهج الرسمية المنشورة على موقع مركز تطوير المناهج:
+          </p>
+          <div className="pt-1">
+            <a
+              href="https://nccd.gov.jo/Ar/Pages/textbooks"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-black transition-colors shadow-xs group cursor-pointer"
+              title="زيارة رابط مركز تطوير المناهج - الكتب المدرسية"
+            >
+              <span>مركز تطوير المناهج - الكتب المدرسية</span>
+              <ExternalLink className="w-3.5 h-3.5 text-blue-100 group-hover:translate-x-[-1px] transition-transform" />
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -5608,23 +5733,23 @@ const AboutModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm">
           <motion.div 
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="bg-white rounded-xl w-full max-w-sm overflow-hidden shadow-2xl relative"
+            className="bg-white rounded-xl w-full max-w-md max-h-[92vh] overflow-y-auto shadow-2xl relative"
             dir="rtl"
           >
             <button 
               onClick={onClose}
-              className="absolute top-4 left-4 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 transition-colors"
+              className="absolute top-4 left-4 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 transition-colors z-10"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <div className="p-8 pt-10 text-center">
-              <div className="w-24 h-24 bg-white rounded-xl flex items-center justify-center mx-auto mb-6 shadow-sm border border-black overflow-hidden">
+            <div className="p-6 sm:p-8 pt-8 sm:pt-10 text-center">
+              <div className="w-20 h-20 sm:w-24 sm:h-24 bg-white rounded-xl flex items-center justify-center mx-auto mb-5 shadow-sm border border-black overflow-hidden">
                 <img 
                   src="https://raw.githubusercontent.com/MashalMath/Pdf_Library/main/Shamel12_Logo_Cover.png" 
                   alt="الشامل في الرياضيات المتقدم" 
@@ -5633,23 +5758,28 @@ const AboutModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen
                 />
               </div>
               
-              <h3 className="text-2xl font-black text-slate-900 mb-4 font-mohand">الشامل في الرياضيات المتقدم</h3>
+              <h3 className="text-xl sm:text-2xl font-black text-slate-900 mb-3 font-mohand">الشامل في الرياضيات المتقدم</h3>
               
-              <div className="space-y-4 text-slate-600 font-bold leading-relaxed text-sm md:text-base">
+              <div className="space-y-3 text-slate-600 font-bold leading-relaxed text-xs sm:text-sm">
                 <p>
                   هذا التطبيق هو <span className="text-blue-600 font-black">بنك أسئلة احترافي</span> شامل لمادة الرياضيات للصف الثاني عشر الأكاديمي (جيل 2009).
                 </p>
                 <p>
                   يحتوي التطبيق على أكثر من <span className="text-green-600 font-black">{totalQuestions}+ سؤال</span> متميزة تغطي <span className="text-blue-600 font-black">الفصلين الأول والثاني</span> وموزعة على كافة وحدات المنهاج.
                 </p>
-                <div className="p-4 bg-orange-50 rounded-lg border border-orange-100 text-orange-800 text-xs md:text-sm">
+                <div className="p-3 bg-orange-50 rounded-lg border border-orange-100 text-orange-800 text-xs">
                   هذه الأسئلة مختارة بعناية وهي <span className="underline decoration-orange-300 underline-offset-4">متوقعة بنسبة كبيرة</span> لامتحان الوزارة، تهدف إلى تمكين الطالب من المادة وتحقيق أعلى العلامات بإذن الله.
                 </div>
               </div>
 
+              {/* قسم إخلاء المسؤولية والمصادر الرسمية */}
+              <div className="mt-4 text-right">
+                <OfficialDisclaimerSection />
+              </div>
+
               <button 
                 onClick={onClose}
-                className="mt-8 w-full py-4 bg-blue-600 text-white rounded-xl font-black text-base shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all"
+                className="mt-6 w-full py-3.5 bg-blue-600 text-white rounded-xl font-black text-sm sm:text-base shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all cursor-pointer"
               >
                 فهمت ذلك
               </button>
@@ -5832,6 +5962,7 @@ export default function App() {
     return saved ? JSON.parse(saved) : null;
   });
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [isAppExited, setIsAppExited] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [showMinistryModels, setShowMinistryModels] = useState(() => {
     return localStorage.getItem('showMinistryModels') === 'true';
@@ -5879,8 +6010,7 @@ export default function App() {
     if (!activeResource) return;
 
     let currentScreen = 'home';
-    if (showExitConfirm) currentScreen = 'exit-confirm';
-    else if (showAbout) currentScreen = 'about';
+    if (showAbout) currentScreen = 'about';
     else if (showFavorites) currentScreen = 'favorites';
     else if (showExamScheduleImage) currentScreen = 'exam-schedule';
     else if (selectedTest) currentScreen = 'exam';
@@ -5902,7 +6032,14 @@ export default function App() {
       setInitialExpanded(ids);
       localStorage.setItem('initialExpanded', JSON.stringify(ids));
     }
-    const test = { num, url, unitId: ids?.unitId || 0, lessonId: ids?.lessonId || 0, semesterId: ids?.semesterId || 0 };
+    let effectiveUrl = url;
+    if (!effectiveUrl && ids?.semesterId && ids?.unitId && ids?.lessonId) {
+      effectiveUrl = `https://raw.githubusercontent.com/MashalMath/joschool-11-arabic-exams/Arabic-S1/Math_s${ids.semesterId}_unit${ids.unitId}_L${ids.lessonId}_exam${num}.json`;
+    }
+    if (effectiveUrl) {
+      fetchAndCacheExam(effectiveUrl, true).catch(() => {});
+    }
+    const test = { num, url: effectiveUrl, unitId: ids?.unitId || 0, lessonId: ids?.lessonId || 0, semesterId: ids?.semesterId || 0 };
     setSelectedAdvExam(null);
     setBackRequested(0);
     setSelectedTest(test);
@@ -5931,10 +6068,16 @@ export default function App() {
     localStorage.removeItem('examProgress'); 
   };
 
-  // Pre-initialize history state
+  // Pre-initialize history state with a root guard so the back button on home can be intercepted
   useEffect(() => {
-    if (window.history.state === null) {
-      window.history.replaceState({ screen: 'home' }, '');
+    try {
+      const currentState = window.history.state;
+      if (!currentState || currentState.screen === 'root_guard' || currentState.screen === 'home') {
+        window.history.replaceState({ screen: 'root_guard' }, '');
+        window.history.pushState({ screen: 'home' }, '');
+      }
+    } catch (e) {
+      console.warn("History guard initialization error:", e);
     }
   }, []);
 
@@ -5942,8 +6085,7 @@ export default function App() {
   useEffect(() => {
     // Determine the current logical screen
     let currentScreen = 'home';
-    if (showExitConfirm) currentScreen = 'exit-confirm';
-    else if (showAbout) currentScreen = 'about';
+    if (showAbout) currentScreen = 'about';
     else if (showFavorites) currentScreen = 'favorites';
     else if (showExamScheduleImage) currentScreen = 'exam-schedule';
     else if (selectedTest) currentScreen = 'exam';
@@ -5963,22 +6105,46 @@ export default function App() {
       const state = event.state;
       const targetScreen = state?.screen || 'home';
 
-      // If a resource modal is open, close it first
+      // 1. If Exit Confirm modal is open, back button closes it
+      if (showExitConfirm) {
+        setShowExitConfirm(false);
+        window.history.pushState({ screen: 'home' }, '');
+        return;
+      }
+
+      // 2. If a resource modal is open, close it first
       if (activeResource) {
         setActiveResource(null);
         return;
       }
 
-      // Intercept exit from exam with higher priority
+      // 3. Intercept exit from exam with higher priority
       const isInExam = selectedTest || selectedAdvExam;
-      if (isInExam && (targetScreen === 'home' || targetScreen === 'models' || targetScreen === 'favorites' || targetScreen === 'library' || targetScreen === 'foundation' || targetScreen === 'lesson-videos')) {
+      if (isInExam && (targetScreen === 'home' || targetScreen === 'models' || targetScreen === 'favorites' || targetScreen === 'library' || targetScreen === 'foundation' || targetScreen === 'lesson-videos' || targetScreen === 'root_guard')) {
         window.history.pushState({ screen: selectedTest ? 'exam' : 'adv-exam' }, '');
         setBackRequested(prev => prev + 1);
         return;
       }
 
-      // Exit confirmation logic - triggered when going back from root 'home' state
-      if (currentScreen === 'home' && !state) {
+      // 4. Exit confirmation logic - triggered when going back from root 'home' state or landing on root_guard
+      if (currentScreen === 'home' && (targetScreen === 'root_guard' || !state)) {
+        setShowExitConfirm(true);
+        window.history.pushState({ screen: 'home' }, '');
+        return;
+      }
+
+      // 5. If user lands on root_guard from any screen, return to home and ask exit
+      if (targetScreen === 'root_guard') {
+        setSelectedTest(null);
+        setSelectedAdvExam(null);
+        setShowMinistryModels(false);
+        setShowFavorites(null);
+        setShowExamScheduleImage(false);
+        setShowAbout(false);
+        setShowLibrary(false);
+        setShowFoundationVideos(false);
+        setSelectedLessonVideos(null);
+        setActiveResource(null);
         setShowExitConfirm(true);
         window.history.pushState({ screen: 'home' }, '');
         return;
@@ -6084,6 +6250,104 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [selectedTest, selectedAdvExam, showMinistryModels, showFavorites, showExitConfirm, showExamScheduleImage, showLibrary, showFoundationVideos, selectedLessonVideos, activeResource]);
 
+  // Hardware back button listener for Android WebView, Cordova, and Capacitor
+  useEffect(() => {
+    const handleHardwareBack = (e?: any) => {
+      // 1. Close resource modal (video, PDF, image)
+      if (activeResource) {
+        if (e?.preventDefault) e.preventDefault();
+        setActiveResource(null);
+        return;
+      }
+
+      // 2. Exam back confirmation
+      if (selectedTest || selectedAdvExam) {
+        if (e?.preventDefault) e.preventDefault();
+        setBackRequested(prev => prev + 1);
+        return;
+      }
+
+      // 3. Dismiss exit confirm dialog if already open
+      if (showExitConfirm) {
+        if (e?.preventDefault) e.preventDefault();
+        setShowExitConfirm(false);
+        return;
+      }
+
+      // 4. Modals and sub-screens
+      if (showAbout) {
+        if (e?.preventDefault) e.preventDefault();
+        setShowAbout(false);
+        return;
+      }
+      if (showFavorites) {
+        if (e?.preventDefault) e.preventDefault();
+        setShowFavorites(null);
+        return;
+      }
+      if (showExamScheduleImage) {
+        if (e?.preventDefault) e.preventDefault();
+        setShowExamScheduleImage(false);
+        return;
+      }
+      if (showMinistryModels) {
+        if (e?.preventDefault) e.preventDefault();
+        setShowMinistryModels(false);
+        return;
+      }
+      if (showLibrary) {
+        if (e?.preventDefault) e.preventDefault();
+        setShowLibrary(false);
+        return;
+      }
+      if (showFoundationVideos) {
+        if (e?.preventDefault) e.preventDefault();
+        setShowFoundationVideos(false);
+        return;
+      }
+      if (selectedLessonVideos) {
+        if (e?.preventDefault) e.preventDefault();
+        setSelectedLessonVideos(null);
+        return;
+      }
+
+      // 5. On the Main/Home Screen: Show Exit Confirmation!
+      if (e?.preventDefault) e.preventDefault();
+      setShowExitConfirm(true);
+    };
+
+    document.addEventListener('backbutton', handleHardwareBack, false);
+
+    let capListener: any = null;
+    const capApp = (window as any).Capacitor?.Plugins?.App;
+    if (capApp?.addListener) {
+      capApp.addListener('backButton', () => {
+        handleHardwareBack();
+      }).then((l: any) => {
+        capListener = l;
+      }).catch(() => {});
+    }
+
+    return () => {
+      document.removeEventListener('backbutton', handleHardwareBack, false);
+      if (capListener && typeof capListener.remove === 'function') {
+        capListener.remove();
+      }
+    };
+  }, [
+    activeResource,
+    selectedTest,
+    selectedAdvExam,
+    showExitConfirm,
+    showAbout,
+    showFavorites,
+    showExamScheduleImage,
+    showMinistryModels,
+    showLibrary,
+    showFoundationVideos,
+    selectedLessonVideos
+  ]);
+
   const handleSelectAdvExam = (id: number, isRandom: boolean = false) => {
     setSelectedTest(null);
     localStorage.removeItem('activeTest');
@@ -6095,9 +6359,50 @@ export default function App() {
 
   const handleExitConfirm = () => {
     setShowExitConfirm(false);
-    // On mobile web, we can't reliably "close" the app, but we can move back in history to whatever was before.
-    // Since we maintain our own history, we need to go back past our root.
-    window.history.go(-2); 
+
+    // 1. Android Cordova / WebView wrapper exit
+    try {
+      if ((navigator as any).app?.exitApp) {
+        (navigator as any).app.exitApp();
+        return;
+      }
+    } catch (e) {}
+
+    // 2. Capacitor native app exit
+    try {
+      if ((window as any).Capacitor?.Plugins?.App?.exitApp) {
+        (window as any).Capacitor.Plugins.App.exitApp();
+        return;
+      }
+    } catch (e) {}
+
+    // 3. Android JavaScript interface (for custom Android WebView apps)
+    try {
+      if (typeof (window as any).Android?.closeApp === 'function') {
+        (window as any).Android.closeApp();
+        return;
+      }
+      if (typeof (window as any).Android?.exitApp === 'function') {
+        (window as any).Android.exitApp();
+        return;
+      }
+    } catch (e) {}
+
+    // 4. Browser window.close
+    try {
+      window.close();
+    } catch (e) {}
+    try {
+      window.open('', '_self')?.close();
+    } catch (e) {}
+
+    // 5. Step back past the guarded history stack
+    try {
+      window.history.go(-2);
+    } catch (e) {}
+
+    // 6. Set app exited state to show clean closed screen if browser prevents tab self-close
+    setIsAppExited(true);
   };
 
   // Stability Effect: Clear expansion from localStorage if we are on the home screen.
@@ -6178,7 +6483,7 @@ export default function App() {
       <AnimatePresence mode="popLayout">
         {selectedTest ? (
           <ExamScreen 
-            key="exam" 
+            key={`exam-${selectedTest.semesterId}-${selectedTest.unitId}-${selectedTest.lessonId}-${selectedTest.num}-${selectedTest.url}`} 
             testNum={selectedTest.num} 
             testUrl={selectedTest.url}
             unitId={selectedTest.unitId}
@@ -6337,6 +6642,18 @@ export default function App() {
                       </a>
 
                       <button 
+                        id="about-app-menu-btn"
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          setShowAbout(true);
+                        }}
+                        className="w-full px-4 py-3 flex items-center gap-3 text-slate-800 hover:text-blue-600 font-black hover:bg-blue-50/70 transition-colors border-b border-slate-200 cursor-pointer text-right"
+                      >
+                        <Info className="w-5 h-5 shrink-0 text-slate-600" />
+                        <span>حول التطبيق</span>
+                      </button>
+
+                      <button 
                         id="logout-button"
                         onClick={() => {
                           setIsMenuOpen(false);
@@ -6422,36 +6739,64 @@ export default function App() {
             </header>
 
             <main>
-              <div className="mb-2 grid grid-cols-2 gap-2">
+              <div className={`mb-2 ${SHOW_MINISTRY_EXAM_DATE_CARD ? 'grid grid-cols-2 gap-2' : ''}`}>
                 {/* Expected Models Card */}
                 <div 
                   onClick={() => setShowMinistryModels(true)}
-                  className="bg-white p-4 rounded-lg shadow-sm border border-black flex flex-col items-center justify-center text-center hover:shadow-md transition-all group min-h-[100px] cursor-pointer"
+                  className={`bg-white rounded-lg shadow-sm border border-black flex items-center group cursor-pointer hover:shadow-md transition-all ${
+                    SHOW_MINISTRY_EXAM_DATE_CARD 
+                      ? 'p-4 flex-col justify-center text-center min-h-[100px]' 
+                      : 'p-3.5 flex-row justify-between text-right mb-2'
+                  }`}
                 >
-                  <div className="w-12 h-12 bg-white rounded-lg border border-black flex items-center justify-center mb-2 group-hover:scale-105 transition-transform overflow-hidden shadow-2xs p-1">
-                    <img 
-                      src="https://raw.githubusercontent.com/MashalMath/Pdf_Library/main/Ministry_Logo.jpg" 
-                      alt="نماذج وزارة متوقعة" 
-                      className="w-full h-full object-contain" 
-                      referrerPolicy="no-referrer" 
-                    />
-                  </div>
-                  <div className="text-[12px] font-black text-slate-800 leading-[1.2]">
-                    <div>نماذج وزارة متوقعة</div>
-                  </div>
+                  {SHOW_MINISTRY_EXAM_DATE_CARD ? (
+                    <>
+                      <div className="w-12 h-12 bg-white rounded-lg border border-black flex items-center justify-center mb-2 group-hover:scale-105 transition-transform overflow-hidden shadow-2xs p-1">
+                        <img 
+                          src="https://raw.githubusercontent.com/MashalMath/Pdf_Library/main/Shamel12_JordanFlag.png" 
+                          alt="نماذج وزارة متوقعة" 
+                          className="w-full h-full object-contain" 
+                          referrerPolicy="no-referrer" 
+                        />
+                      </div>
+                      <div className="text-[12px] font-black text-slate-800 leading-[1.2]">
+                        <div>نماذج وزارة متوقعة</div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-white rounded-lg border border-black flex items-center justify-center group-hover:scale-105 transition-transform overflow-hidden shadow-2xs p-1 shrink-0">
+                          <img 
+                            src="https://raw.githubusercontent.com/MashalMath/Pdf_Library/main/Shamel12_JordanFlag.png" 
+                            alt="نماذج وزارة متوقعة" 
+                            className="w-full h-full object-contain" 
+                            referrerPolicy="no-referrer" 
+                          />
+                        </div>
+                        <div className="text-right">
+                          <h3 className="text-sm font-extrabold text-slate-900 font-mohand group-hover:text-blue-600 transition-colors">نماذج وزارة متوقعة</h3>
+                          <p className="text-[11px] text-slate-500 font-bold mt-0.5">أسئلة ونماذج تدريبية شاملة للامتحان الوزاري</p>
+                        </div>
+                      </div>
+                      <ChevronLeft className="w-5 h-5 text-slate-400 shrink-0 group-hover:translate-x-[-2px] transition-transform" />
+                    </>
+                  )}
                 </div>
 
-                {/* Exam Date Label */}
-                <div 
-                  onClick={() => setShowExamScheduleImage(true)}
-                  className="bg-yellow-400 text-yellow-950 p-4 rounded-lg shadow-sm border border-black flex flex-col items-center justify-center text-center min-h-[100px] cursor-pointer hover:shadow-md transition-all"
-                >
-                  <span className="text-[10px] font-bold uppercase tracking-widest opacity-70 mb-1">موعد امتحان الوزارة</span>
-                  <span className="text-[12px] font-black leading-tight">الخميس 01-07-2027</span>
-                  <div className="scale-90 origin-center -mt-1 w-full">
-                    <ExamCountdown />
+                {/* Exam Date Label (مخفية مؤقتاً - وعند طلب إعادتها لاحقاً تعود بنفس الموعد والتنسيق والموقع تماماً) */}
+                {SHOW_MINISTRY_EXAM_DATE_CARD && (
+                  <div 
+                    onClick={() => setShowExamScheduleImage(true)}
+                    className="bg-yellow-400 text-yellow-950 p-4 rounded-lg shadow-sm border border-black flex flex-col items-center justify-center text-center min-h-[100px] cursor-pointer hover:shadow-md transition-all"
+                  >
+                    <span className="text-[10px] font-bold uppercase tracking-widest opacity-70 mb-1">موعد امتحان الوزارة</span>
+                    <span className="text-[12px] font-black leading-tight">الخميس 01-07-2027</span>
+                    <div className="scale-90 origin-center -mt-1 w-full">
+                      <ExamCountdown />
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {ACADEMIC_DATA.map((semester) => (
@@ -6545,7 +6890,12 @@ export default function App() {
               </motion.div>
             </main>
 
-            <footer className="mt-6 mb-2 flex flex-col items-center justify-center gap-2.5 text-center">
+            {/* قسم إخلاء المسؤولية والمصادر الرسمية في أسفل الشاشة الرئيسية */}
+            <div className="mt-4 mb-3">
+              <OfficialDisclaimerSection />
+            </div>
+
+            <footer className="mt-4 mb-2 flex flex-col items-center justify-center gap-2.5 text-center">
               <div className="flex items-center gap-3">
                 <a
                   id="main-footer-facebook-btn"
@@ -6603,10 +6953,36 @@ export default function App() {
         isOpen={showExitConfirm}
         onCancel={() => {
           setShowExitConfirm(false);
-          // Standard back from exit-confirm screen returns to home state
         }}
         onConfirm={handleExitConfirm}
       />
+
+      {/* If the app cannot be closed directly by browser script, show clean exited screen */}
+      {isAppExited && (
+        <div className="fixed inset-0 z-[9999] bg-[#e8d5c4] flex items-center justify-center p-6 font-mohand select-none text-center" dir="rtl">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.92, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-white rounded-3xl border-2 border-black shadow-[4px_4px_0px_#000] p-7 max-w-sm w-full space-y-4"
+          >
+            <div className="w-16 h-16 rounded-2xl bg-rose-50 border border-rose-200 text-[#ef233c] flex items-center justify-center mx-auto shadow-xs">
+              <LogOut className="w-8 h-8" />
+            </div>
+            <h2 className="text-xl font-black text-slate-900">تم إغلاق التطبيق</h2>
+            <p className="text-xs sm:text-sm text-slate-600 font-bold leading-relaxed">
+              شكراً لاستخدامك منصة الشامل في الرياضيات. يمكنك الآن إغلاق هذه النافذة أو العودة في أي وقت.
+            </p>
+            <button
+              type="button"
+              id="reopen-app-btn"
+              onClick={() => setIsAppExited(false)}
+              className="w-full py-3.5 px-4 bg-[#0c1322] hover:bg-slate-800 text-white rounded-xl font-black text-sm border border-black shadow-[2px_2px_0px_#000] active:scale-95 transition-all cursor-pointer"
+            >
+              العودة للمنصة
+            </button>
+          </motion.div>
+        </div>
+      )}
 
       {/* Ministry Exam Schedule Notice Modal */}
       <AnimatePresence>
@@ -6649,7 +7025,7 @@ export default function App() {
               <div className="w-16 h-16 bg-white rounded-xl border border-black p-2 flex items-center justify-center mb-4 shadow-xs overflow-hidden">
                 <img 
                   src="https://raw.githubusercontent.com/MashalMath/Pdf_Library/main/Ministry_Logo.jpg" 
-                  alt="نماذج وزارة متوقعة" 
+                  alt="برنامج امتحانات الوزارة" 
                   className="w-full h-full object-contain" 
                   referrerPolicy="no-referrer" 
                 />
