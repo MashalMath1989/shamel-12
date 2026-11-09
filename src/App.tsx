@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from 're
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronDown, ChevronLeft, ChevronRight, BookOpen, GraduationCap, ArrowRight, ArrowLeft, CheckCircle2, XCircle, Loader2, RefreshCcw, Clock, Lightbulb, X, Printer, FileText, AlertTriangle, Download, FileDown, Star, Share2, Flag, Trash2, Info, LogOut, Mail, Lock, User as UserIcon, LogIn, Menu, Check, History, Settings, Link, ExternalLink, Maximize2, Minimize2, Eye, Moon, Sun, ZoomIn, ZoomOut, Play, Copy, MessageCircle, Send, Facebook, Instagram } from 'lucide-react';
 import { auth, db, OperationType, handleFirestoreError } from './firebase';
-import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, User as FirebaseUser, GoogleAuthProvider, browserPopupRedirectResolver } from 'firebase/auth';
+import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, User as FirebaseUser, GoogleAuthProvider, browserPopupRedirectResolver, deleteUser } from 'firebase/auth';
 import { doc, setDoc, getDoc, collection, query, where, getDocs, onSnapshot, addDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
 // @ts-ignore
 import html2pdf from 'html2pdf.js';
@@ -5688,6 +5688,87 @@ const ExitConfirmModal: React.FC<{ isOpen: boolean; onCancel: () => void; onConf
   );
 };
 
+// --- Delete Account Confirmation Modal ---
+const DeleteAccountModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirmDelete: () => Promise<void>;
+  loading: boolean;
+  errorMessage?: string | null;
+}> = ({ isOpen, onClose, onConfirmDelete, loading, errorMessage }) => {
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs select-none" dir="rtl">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={loading ? undefined : onClose}
+            className="absolute inset-0"
+          />
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
+            className="relative bg-white rounded-3xl w-full max-w-sm overflow-hidden border-2 border-black shadow-[4px_4px_0px_#000] font-mohand p-6 text-center z-10"
+          >
+            <div className="w-16 h-16 bg-rose-50 border border-rose-200 rounded-2xl flex items-center justify-center mx-auto mb-4 text-[#ef233c] shadow-xs">
+              <Trash2 className="w-8 h-8 text-rose-600" />
+            </div>
+            <h3 className="text-xl font-black text-slate-900 mb-2">تأكيد حذف الحساب نهائياً</h3>
+            <p className="text-slate-600 text-sm font-bold leading-relaxed mb-3">
+              هل أنت متأكد من رغبتك في حذف حسابك وبياناتك بشكل كامل وإنهاء الحساب؟
+            </p>
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-rose-800 text-xs font-bold leading-relaxed mb-4 text-right">
+              ⚠️ <span className="font-black">تنبيه:</span> سيتم حذف كافة بياناتك وسجل الاختبارات وتقدمك الدراسي بشكل كامل ونهائي من خوادمنا ولن تتمكن من استعادتها لاحقاً.
+            </div>
+
+            {errorMessage && (
+              <div className="mb-4 p-3 bg-red-100 border border-red-300 text-red-700 text-xs font-bold rounded-xl text-right leading-relaxed">
+                {errorMessage}
+              </div>
+            )}
+            
+            <div className="flex flex-col gap-2.5">
+              <button 
+                type="button"
+                id="delete-account-confirm-btn"
+                onClick={onConfirmDelete}
+                disabled={loading}
+                className="w-full py-3.5 px-4 bg-[#ef233c] hover:bg-rose-600 text-white rounded-xl font-black text-sm shadow-[2px_2px_0px_#000] border border-black hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-0 active:translate-y-0 active:shadow-none transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>جاري حذف الحساب والبيانات...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>تأكيد حذف الحساب والبيانات نهائياً</span>
+                  </>
+                )}
+              </button>
+              <button 
+                type="button"
+                id="delete-account-cancel-btn"
+                onClick={onClose}
+                disabled={loading}
+                className="w-full py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-sm border border-black/20 hover:border-black/40 transition-all cursor-pointer disabled:opacity-50"
+              >
+                إلغاء، البقاء في التطبيق
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+};
+
+
 const OfficialDisclaimerSection: React.FC<{ className?: string }> = ({ className = '' }) => {
   return (
     <div 
@@ -5962,6 +6043,9 @@ export default function App() {
     return saved ? JSON.parse(saved) : null;
   });
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
   const [isAppExited, setIsAppExited] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [showMinistryModels, setShowMinistryModels] = useState(() => {
@@ -6274,6 +6358,13 @@ export default function App() {
         return;
       }
 
+      // 3.5 Dismiss delete account dialog if open
+      if (showDeleteAccountModal) {
+        if (e?.preventDefault) e.preventDefault();
+        setShowDeleteAccountModal(false);
+        return;
+      }
+
       // 4. Modals and sub-screens
       if (showAbout) {
         if (e?.preventDefault) e.preventDefault();
@@ -6339,6 +6430,7 @@ export default function App() {
     selectedTest,
     selectedAdvExam,
     showExitConfirm,
+    showDeleteAccountModal,
     showAbout,
     showFavorites,
     showExamScheduleImage,
@@ -6403,6 +6495,52 @@ export default function App() {
 
     // 6. Set app exited state to show clean closed screen if browser prevents tab self-close
     setIsAppExited(true);
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeleteAccountLoading(true);
+    setDeleteAccountError(null);
+    try {
+      if (user) {
+        // 1. Delete Firestore user document if present
+        try {
+          await deleteDoc(doc(db, 'users', user.uid));
+        } catch (dbErr) {
+          console.warn("Could not delete user document from Firestore:", dbErr);
+        }
+
+        // 2. Delete user account from Firebase Auth
+        await deleteUser(user);
+      }
+
+      // 3. Clear local storage records
+      localStorage.removeItem('completedLessons');
+      localStorage.removeItem('fullMarkExams');
+      localStorage.removeItem('examProgress');
+      localStorage.removeItem('activeTest');
+      localStorage.removeItem('activeAdvExam');
+      localStorage.removeItem('showMinistryModels');
+      localStorage.removeItem('showFavorites');
+      localStorage.removeItem('showLibrary');
+      localStorage.removeItem('showFoundationVideos');
+      localStorage.removeItem('activeLessonVideos');
+
+      // 4. Reset state
+      setUser(null);
+      setCompletedLessons([]);
+      setFullMarkExams([]);
+      setExamProgress({});
+      setShowDeleteAccountModal(false);
+    } catch (err: any) {
+      console.error("Delete account error:", err);
+      if (err?.code === 'auth/requires-recent-login') {
+        setDeleteAccountError("لحماية أمان حسابك، تتطلب هذه العملية تسجيل الدخول مجدداً حديثاً. يرجى تسجيل الخروج ثم إعادة تسجيل الدخول والمحاولة مرة أخرى.");
+      } else {
+        setDeleteAccountError(err?.message || "حدث خطأ أثناء محاولة حذف الحساب. يرجى المحاولة لاحقاً.");
+      }
+    } finally {
+      setDeleteAccountLoading(false);
+    }
   };
 
   // Stability Effect: Clear expansion from localStorage if we are on the home screen.
@@ -6659,10 +6797,23 @@ export default function App() {
                           setIsMenuOpen(false);
                           signOut(auth);
                         }}
-                        className="w-full px-4 py-3 flex items-center gap-3 text-red-600 font-black hover:bg-red-50 transition-colors cursor-pointer"
+                        className="w-full px-4 py-3 flex items-center gap-3 text-red-600 font-black hover:bg-red-50 transition-colors border-b border-slate-200 cursor-pointer"
                       >
                         <LogOut className="w-5 h-5 shrink-0" />
                         <span>تسجيل الخروج</span>
+                      </button>
+
+                      <button 
+                        id="delete-account-menu-btn"
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          setDeleteAccountError(null);
+                          setShowDeleteAccountModal(true);
+                        }}
+                        className="w-full px-4 py-3 flex items-center gap-3 text-rose-700 hover:text-rose-900 font-black hover:bg-rose-50 transition-colors cursor-pointer text-right"
+                      >
+                        <Trash2 className="w-5 h-5 shrink-0 text-rose-600" />
+                        <span>حذف الحساب</span>
                       </button>
                     </motion.div>
                   </>
@@ -6920,7 +7071,18 @@ export default function App() {
                   <Instagram className="w-5 h-5 text-white stroke-[2.2] group-hover:scale-105 transition-transform" />
                 </a>
               </div>
-              <p className="text-slate-600 font-bold text-[11px]">© 2026 منصة الشامل في الرياضيات</p>
+              <div className="flex items-center justify-center gap-2 text-slate-500 font-bold text-[11px]">
+                <span>© 2026 منصة الشامل في الرياضيات</span>
+                <span>•</span>
+                <a
+                  href="/privacy.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-slate-500 hover:text-blue-600 underline underline-offset-2 transition-colors cursor-pointer"
+                >
+                  سياسة الخصوصية
+                </a>
+              </div>
             </footer>
           </motion.div>
         )}
@@ -6955,6 +7117,19 @@ export default function App() {
           setShowExitConfirm(false);
         }}
         onConfirm={handleExitConfirm}
+      />
+
+      <DeleteAccountModal
+        isOpen={showDeleteAccountModal}
+        onClose={() => {
+          if (!deleteAccountLoading) {
+            setShowDeleteAccountModal(false);
+            setDeleteAccountError(null);
+          }
+        }}
+        onConfirmDelete={handleDeleteAccount}
+        loading={deleteAccountLoading}
+        errorMessage={deleteAccountError}
       />
 
       {/* If the app cannot be closed directly by browser script, show clean exited screen */}

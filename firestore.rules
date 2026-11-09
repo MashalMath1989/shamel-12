@@ -42,6 +42,7 @@ service cloud.firestore {
       allow create: if isOwner(userId) && isValidUser(incoming());
       allow update: if isOwner(userId) && isValidUser(incoming()) && 
                     incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'lastLogin', 'completedLessons', 'fullMarkExams', 'examProgress']);
+      allow delete: if isOwner(userId);
       
       // Favorites Subcollection
       match /favorites/{favoriteId} {
@@ -79,6 +80,7 @@ service cloud.firestore {
         allow list: if isOwner(userId);
         allow get: if isOwner(userId);
         allow create: if isOwner(userId) && isValidAttempt(incoming());
+        allow delete: if isOwner(userId);
       }
     }
   }
